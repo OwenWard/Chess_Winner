@@ -1,0 +1,296 @@
+---
+title: "Chess EDA"
+format: html
+bibliography: refs.bib
+---
+
+
+```{r setup}
+#| include: false
+
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+
+```
+
+
+
+## Data
+
+- Confirm the time controls for the Lichess data?
+
+What types of data?
+How many games involve titles?
+
+```{r}
+#| warning: false
+
+lichess_data <- readRDS("../rdata/lichess_pilot.RData")
+```
+
+
+
+```{r}
+table(lichess_data$Variant)
+
+head(sort(table(lichess_data$TimeControl), decreasing = TRUE))
+
+## this looks to be seconds + incrememnt, makes the most sense 
+## could just take common blitz formats, 3 mins and 5 mins,
+## would be 50k games still
+
+head(sort(table(lichess_data$Event), decreasing = TRUE))
+
+lichess_data %>% filter(Variant == "Standard") %>% 
+  group_by(Event) %>% 
+  count() %>% 
+  arrange(-n)
+
+```
+
+
+Get all games from a specific player in a specific format,
+to see if `RatingDiff` tracks how
+the rating changes.
+
+```{r}
+lichess_data %>% filter(TimeControl == "180+0") %>% 
+  filter(Event == "Rated Blitz game") %>% 
+  arrange(UTCDate, UTCTime) %>% 
+  mutate(peng_elo = ifelse(White == "penguingim1", WhiteElo, BlackElo)) %>% 
+  mutate(peng_change = ifelse(White == "penguingim1", WhiteRatingDiff,
+                              BlackRatingDiff)) %>% 
+  select(UTCDate, UTCTime, peng_elo, peng_change) %>%
+  mutate(peng_elo = as.numeric(peng_elo)) %>% 
+  mutate(peng_change = as.numeric(peng_change)) %>% 
+  mutate(ELO_change = peng_elo + peng_change) %>% 
+  head(n = 10)
+
+### so RatingDiff gives you the starting ELO for the next game
+
+```
+
+- Casual games don't change the rating, so do we want to remove them from 
+the data entirely? Would likely have a different role in winner effects,
+etc.
+
+
+```{r}
+## get simpler data
+
+simple_data <- lichess_data %>% 
+  filter(Event %in% c("Rated Bullet game", "Rated Blitz game")) 
+
+lichess_data %>% 
+  filter(Event == "Rated Bullet game") %>% 
+  group_by(TimeControl) %>% 
+  count() %>% 
+  arrange(-n)
+
+
+bullet_60 <- lichess_data %>% 
+  filter(Event == "Rated Bullet game") %>% 
+  filter(TimeControl == "60+0")
+
+
+# bullet_60
+
+# head(sort(table(bullet_60$White), decreasing = TRUE), 20)
+
+## have a few different players with good number of games
+## get list of all players, fit some sort of model using all players
+## who play enough games
+
+
+head(sort(table(c(bullet_60$White, bullet_60$Black)), decreasing = TRUE), 25)
+
+## top 25 players possibly enough then, consider all games they are involved
+## in
+
+table(bullet_60$Result)
+
+```
+
+
+## Multilevel Logistic Regression
+
+Similar to @ding2021nhl, we wish to fit a multilevel logistic 
+regression to see if we can identify individual 
+effects for chess players in this data.
+
+To do this, we will consider the current history of an individual player
+as their win ratio in their past $n$ games, where we will investigate
+the sensitivity of these results to different choices of $n$.
+
+We will identify focal players as those who were used to query the API,
+i.e the `Username` for each game.
+
+
+```{r, past-n-results}
+
+## given a players data, determine how many of the previous games they won
+## do this for a single player first of all
+## only need to do this for the potential focal players
+
+curr_user <- "penguingim1"
+
+curr_games <- 
+
+
+```
+
+
+
+<!-- ## Streaks -->
+
+<!-- Calculate the length of winning streaks for any given player, -->
+<!-- look at how these vary across rankings maybe? -->
+
+
+```{r}
+#| include: false
+# get_streaks <- function(games, player_name) {
+#   player_games <- games %>% 
+#     filter(White == player_name | Black == player_name) 
+#   
+#   winner <- player_games$
+#   ## then get their streaks in here also
+# }
+
+
+peng_games <- bullet_60 %>% 
+  filter(White == "penguingim1" | Black == "penguingim1")
+
+peng_games  
+
+peng_games$w <- ifelse(peng_games$Username == peng_games$White, 1, 0)
+
+# result column
+peng_games$result <- ifelse(peng_games$w == 1 & peng_games$Result == "1-0" | 
+                         peng_games$w == 0 & peng_games$Result == "0-1", 1, 0)
+
+
+peng_games <- peng_games %>% 
+  arrange(UTCDate, UTCTime)
+
+
+peng_games$result
+
+
+### then count the streaks in this
+## win and loss streaks
+
+wins <- which(peng_games$result == 1)
+
+s <- split(wins, cumsum(c(TRUE, diff(wins) != 1)))
+win_streaks <- map_dbl(s, length) %>% as.vector()
+
+## now need to get the losing streaks
+losses <- which(peng_games$result == 0)
+s <- split(losses, cumsum(c(TRUE, diff(losses) != 1)))
+
+loss_streaks <- map_dbl(s, length) %>% as.vector()
+
+sum(loss_streaks) + sum(win_streaks)
+
+nrow(peng_games)
+```
+
+
+<!-- For a given game, get the proportion of games won by the White player -->
+<!-- in their last $n$ games, where we can vary $n$ and see how -->
+<!-- changing it changes the results. -->
+
+<!-- - Would you want to count wins as white and/or wins as black then? -->
+
+<!-- - General winner effect -->
+
+<!-- - Pick a player as "focal", look at whether they win or lose, -->
+<!-- accounting for their colour, their game history, the ranking  -->
+<!-- difference to their opponent, and possibly also the  -->
+<!-- titles, which could have some sort of psychological impact on the outcome. -->
+
+```{r}
+#| include: false
+
+### get past n results
+
+
+prev_games <- function(player, hist_len) {
+  
+}
+
+
+curr_user <- "penguingim1"
+
+curr_data <- bullet_60 %>% 
+  filter(White == curr_user | Black == curr_user)
+  
+curr_data$w <- ifelse(curr_data$White == curr_user, 1, 0)
+
+
+## this doesn't account for draws, gives them equal weight to a loss
+
+
+## one thing you could do is compare results after a draw with
+## results after a win or a loss, see how they differ
+## if not effect, and control for everything, then they should be the same
+
+curr_data$result <- ifelse(curr_data$w == 1 & curr_data$Result == "1-0" | 
+                         curr_data$w == 0 & curr_data$Result == "0-1", 1, 0)
+
+
+curr_data %>% 
+  select(White, Black, WhiteElo, BlackElo, w, result, UTCDate, UTCTime) %>% 
+  arrange(UTCDate, UTCTime)
+
+## then use this to get curr win history for curr_user for each game
+```
+
+
+
+
+<!-- ## Hot Hand Fallacy -->
+
+<!-- - Potential different probabilities of success in subsequent games,  -->
+<!-- i.e depending on who opponent is, black vs white, etc -->
+
+<!-- - Evidence for some individual effects but -->
+<!-- not sure if there is anything out there for -->
+<!-- Chess already? -->
+
+
+<!-- ## Some simple Models -->
+
+<!-- - Take previous 10 games, calculate win proportion in those games -->
+
+<!-- - Use this as a predictor for outcome -->
+
+<!-- - Just predict win probability for White, to control for colour -->
+
+
+<!-- ```{r} -->
+<!-- ## logistic regression for win or less based on previous result -->
+<!-- ## controlling for opponents ranking, your ranking, colour -->
+<!-- ## previous game -->
+<!-- ## time since previous game maybe? -->
+<!-- ## -->
+<!-- ``` -->
+
+
+
+<!-- - The tennis stuff maybe and compare it? -->
+
+<!-- - Does how the game ended make a difference? Don't seem to have this for lichess -->
+
+<!-- - Games in tournaments vs rated, other factors like this -->
+
+
+
+<!-- ### References -->
+
+<!-- - The hot hand in the wild -->
+
+<!-- - Surprised by the Hot Hand Fallacy? -->
+<!-- A Truth in the Law of Small Numbers -->
