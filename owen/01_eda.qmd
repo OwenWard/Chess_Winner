@@ -11,6 +11,9 @@ bibliography: refs.bib
 knitr::opts_chunk$set(echo = FALSE)
 
 library(tidyverse)
+library(RcppRoll)
+
+theme_set(theme_bw())
 
 ```
 
@@ -18,10 +21,7 @@ library(tidyverse)
 
 ## Data
 
-- Confirm the time controls for the Lichess data?
-
-What types of data?
-How many games involve titles?
+We first wish to investigate the properties of the scraped data.
 
 ```{r}
 #| warning: false
@@ -29,7 +29,15 @@ How many games involve titles?
 lichess_data <- readRDS("../rdata/lichess_pilot.RData")
 ```
 
+We see that the vast majority of games in this dataset 
+are Standard, with the regular rules, etc. Similarly, the most
+commonly played time controls is 180+0,
+which corresponds to 3 minute blitz games with no time increment.
 
+Of standard games, we see that the majority are rated blitz and bullet games.
+These correspond to randomly playing available players on the site 
+at a time. This differs from tournaments, which make up a sizeable proportion
+of standard games also.
 
 ```{r}
 table(lichess_data$Variant)
@@ -50,9 +58,11 @@ lichess_data %>% filter(Variant == "Standard") %>%
 ```
 
 
+
 Get all games from a specific player in a specific format,
-to see if `RatingDiff` tracks how
-the rating changes.
+to see that `RatingDiff` tracks how
+the rating changes. For the White/Black player based
+on the result of the current game.
 
 ```{r}
 lichess_data %>% filter(TimeControl == "180+0") %>% 
@@ -74,6 +84,10 @@ lichess_data %>% filter(TimeControl == "180+0") %>%
 - Casual games don't change the rating, so do we want to remove them from 
 the data entirely? Would likely have a different role in winner effects,
 etc.
+
+For all current analysis we will restrict to 1 minute rated bullet games,
+the most commonly played format in this dataset, with 13k games compared
+to 12k games of 30 second bullet and 12k games of 3 minute blitz.
 
 
 ```{r}
@@ -101,8 +115,14 @@ bullet_60 <- lichess_data %>%
 ## have a few different players with good number of games
 ## get list of all players, fit some sort of model using all players
 ## who play enough games
+```
 
+The top 25 players all play at least 80 games in this format, and across 
+all games in this format we see relatively few draws. This is unsurprising
+as it it hard to end at a draw in these short time controls, when one player
+can lose on time.
 
+```{r}
 head(sort(table(c(bullet_60$White, bullet_60$Black)), decreasing = TRUE), 25)
 
 ## top 25 players possibly enough then, consider all games they are involved
@@ -124,19 +144,101 @@ as their win ratio in their past $n$ games, where we will investigate
 the sensitivity of these results to different choices of $n$.
 
 We will identify focal players as those who were used to query the API,
-i.e the `Username` for each game.
+i.e the `Username` for each game. We only consider Rated 60 second bullet games
+here.
 
 
 ```{r, past-n-results}
+#| message: false
 
 ## given a players data, determine how many of the previous games they won
 ## do this for a single player first of all
 ## only need to do this for the potential focal players
 
 curr_user <- "penguingim1"
+curr_n <- 10
 
-curr_games <- 
+curr_games <- bullet_60 %>% 
+  filter(White == curr_user | Black == curr_user)
 
+
+hist_games <- curr_games %>% 
+  arrange(UTCDate, UTCTime) %>% 
+  mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+  select(White:BlackElo, focal_white)
+
+## need to check all the game types are the same here then
+table(curr_games$Variant)
+table(curr_games$Result)
+
+## then get the result for curr_user for each game, there will be draws here
+
+user_games <- hist_games %>% 
+  mutate(focal_result = case_when(
+    (focal_white == 1 & Result == "1-0") ~ 1,
+    (focal_white == 0 & Result == "0-1") ~ 1,
+    (Result == "1/2-1/2") ~ 0.5,
+    .default = 0
+    )) %>% 
+  mutate(focal_win_prop = c(rep(0, curr_n - 1), roll_mean(focal_result, n = curr_n)))
+
+user_games %>% 
+  ggplot(aes(x = focal_win_prop)) +
+  geom_histogram(bins = 20) +
+  labs(title = "Win Ratio for Previous 10 Games, one Player")
+
+### now just need to get the rolling average of focal result
+### need to pad this output
+
+### could we do this using a map across the players of interest,
+### get their games and then put it all back together afterwards?
+### think that should work, just need to make it into a function then
+
+
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+      )) %>% 
+    mutate(focal_win_prop = c(rep(0, prev_n - 1), 
+                              roll_mean(focal_result, n = prev_n)))
+  
+  hist_games
+}
+
+
+head(get_hist(user = curr_user, games = bullet_60, prev_n = 10))
+
+## this seems to be working, then do it across a vector of
+## players
+
+```
+
+
+```{r}
+a <- head(sort(table(c(bullet_60$White, bullet_60$Black)), decreasing = TRUE), 25)
+
+top_players <- names(a)
+
+
+tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 5)
+
+
+tidy_games %>% 
+  mutate(focal_player = ifelse(focal_white == 1, White, Black)) %>% 
+  group_by(focal_player) %>% 
+  count() %>% 
+  arrange(-n)
+
+## why does this have 17 players rather than 25 then?
+## why are some missing?
 
 ```
 
