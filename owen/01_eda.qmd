@@ -1,6 +1,10 @@
 ---
 title: "Chess EDA"
-format: html
+author: Owen G. Ward
+format: 
+  html:
+    toc: true
+    toc-location: left
 bibliography: refs.bib
 ---
 
@@ -23,7 +27,9 @@ theme_set(theme_bw())
 
 ## Data
 
-We first wish to investigate the properties of the scraped data.
+We first wish to investigate the properties of the scraped data. We 
+focus for now on the Lichess data. We see that the vast majority of games in this dataset 
+are Standard Chess, with the regular rules, etc. 
 
 ```{r}
 #| warning: false
@@ -31,43 +37,65 @@ We first wish to investigate the properties of the scraped data.
 lichess_data <- readRDS("../rdata/lichess_pilot.RData")
 ```
 
-We see that the vast majority of games in this dataset 
-are Standard, with the regular rules, etc. Similarly, the most
-commonly played time controls is 180+0,
+
+
+```{r}
+#| echo: true
+## Variants of Chess in this data
+table(lichess_data$Variant)
+```
+Similarly, the most
+commonly played time control, across all formats of chess, is 180+0,
 which corresponds to 3 minute blitz games with no time increment.
+
+
+```{r}
+#| echo: true
+head(sort(table(lichess_data$TimeControl), decreasing = TRUE))
+```
 
 Of standard games, we see that the majority are rated blitz and bullet games.
 These correspond to randomly playing available players on the site 
-at a time. This differs from tournaments, which make up a sizeable proportion
-of standard games also.
+at a given time. This differs from tournaments, which make up a sizeable proportion
+of standard games also (and which might have different dynamics).
+
 
 ```{r}
-table(lichess_data$Variant)
-
-head(sort(table(lichess_data$TimeControl), decreasing = TRUE))
-
-## this looks to be seconds + incrememnt, makes the most sense 
-## could just take common blitz formats, 3 mins and 5 mins,
-## would be 50k games still
-
+#| echo: true
 head(sort(table(lichess_data$Event), decreasing = TRUE))
-
-lichess_data %>% filter(Variant == "Standard") %>% 
-  group_by(Event) %>% 
-  count() %>% 
-  arrange(-n)
 
 ```
 
 
+```{r}
+#| echo: true
 
-Get all games from a specific player in a specific format,
-to see that `RatingDiff` tracks how
-the rating changes. For the White/Black player based
-on the result of the current game.
+lichess_data %>% filter(Variant == "Standard") %>% 
+  group_by(Event) %>% 
+  count() %>% 
+  arrange(-n) %>% 
+  head()
+
+```
+
+
+The variable `ratingDiff` records how the ELO of both the black and
+white player changes based on the outcome of that game.
+Here these ELO scores are across the different event types, which
+may contain multiple time formats. For example, an ELO for Bullet play will 
+change when both 1 minute and 30 second games are played, and also in 
+both tournament and rated games.
+
+
+<!-- Get all games from a specific player in a specific format, -->
+<!-- to see that `RatingDiff` tracks how -->
+<!-- the rating changes. For the White/Black player based -->
+<!-- on the result of the current game. -->
 
 ```{r}
-lichess_data %>% filter(TimeControl == "180+0") %>% 
+#| echo: false
+#| eval: false
+elo_check <- lichess_data %>% filter(TimeControl == "180+0") %>% 
   filter(Event == "Rated Blitz game") %>% 
   arrange(UTCDate, UTCTime) %>% 
   mutate(peng_elo = ifelse(White == "penguingim1", WhiteElo, BlackElo)) %>% 
@@ -76,27 +104,51 @@ lichess_data %>% filter(TimeControl == "180+0") %>%
   select(UTCDate, UTCTime, peng_elo, peng_change) %>%
   mutate(peng_elo = as.numeric(peng_elo)) %>% 
   mutate(peng_change = as.numeric(peng_change)) %>% 
-  mutate(ELO_change = peng_elo + peng_change) %>% 
-  head(n = 10)
+  mutate(ELO_change = peng_elo + peng_change) 
 
-### so RatingDiff gives you the starting ELO for the next game
+
+elo_check %>% 
+  mutate(diff = peng_elo - lag(ELO_change))
+
+### so RatingDiff gives you the starting ELO for the next game of the same type
+
+elo_check_2 <- lichess_data %>% 
+  filter(Event == "Rated Blitz game") %>% 
+  arrange(UTCDate, UTCTime) %>% 
+  mutate(peng_elo = ifelse(White == "penguingim1", WhiteElo, BlackElo)) %>% 
+  mutate(peng_change = ifelse(White == "penguingim1", WhiteRatingDiff,
+                              BlackRatingDiff)) %>% 
+  select(UTCDate, UTCTime, peng_elo, peng_change) %>% 
+  mutate(peng_elo = as.numeric(peng_elo)) %>% 
+  mutate(peng_change = as.numeric(peng_change)) %>% 
+  mutate(ELO_change = peng_elo + peng_change) %>% 
+  mutate(diff = peng_elo - lag(ELO_change))
+
+elo_check_2
+
+## so these don't always agree, because could play arena games, etc
 
 ```
 
-- Casual games don't change the rating, so do we want to remove them from 
-the data entirely? Would likely have a different role in winner effects,
-etc.
+Casual games don't change the rating, so we should probably treat them
+differently.
+Would likely have a different role in winner effects,
+etc. It is possible that Arena and tournament games also have different 
+dynamics.
 
-For all current analysis we will restrict to 1 minute rated bullet games,
+
+## Initial Models
+
+For the current initial analysis we
+will restrict to 1 minute rated bullet games,
 the most commonly played format in this dataset, with 13k games compared
 to 12k games of 30 second bullet and 12k games of 3 minute blitz.
 
 
 ```{r}
-## get simpler data
+#| echo: true
+## get initial dataset to use for analysis
 
-simple_data <- lichess_data %>% 
-  filter(Event %in% c("Rated Bullet game", "Rated Blitz game")) 
 
 lichess_data %>% 
   filter(Event == "Rated Bullet game") %>% 
@@ -108,15 +160,6 @@ lichess_data %>%
 bullet_60 <- lichess_data %>% 
   filter(Event == "Rated Bullet game") %>% 
   filter(TimeControl == "60+0")
-
-
-# bullet_60
-
-# head(sort(table(bullet_60$White), decreasing = TRUE), 20)
-
-## have a few different players with good number of games
-## get list of all players, fit some sort of model using all players
-## who play enough games
 ```
 
 The top 25 players all play at least 80 games in this format, and across 
@@ -125,33 +168,69 @@ as it it hard to end at a draw in these short time controls, when one player
 can lose on time.
 
 ```{r}
+#| echo: true
 head(sort(table(c(bullet_60$White, bullet_60$Black)), decreasing = TRUE), 25)
 
-## top 25 players possibly enough then, consider all games they are involved
-## in
 
+## results of these games
 table(bullet_60$Result)
 
 ```
 
 
-## Multilevel Logistic Regression
+### Multilevel Logistic Regression
 
 Similar to @ding2021nhl, we wish to fit a multilevel logistic 
 regression to see if we can identify individual 
 effects for chess players in this data.
+We will incorporate fixed effects for the player effects of the focal
+player in these games, along 
 
-To do this, we will consider the current history of an individual player
-as their win ratio in their past $n$ games, where we will investigate
-the sensitivity of these results to different choices of $n$.
 
 We will identify focal players as those who were used to query the API,
 i.e the `Username` for each game. We only consider Rated 60 second bullet games
-here.
+here, and use the top 18 players, who all play at least 100 games
+of 1 minute rated bullet chess in this dataset.
+
+We will consider the current history of an individual player
+as their win ratio in their past $n$ games, where we will investigate
+the sensitivity of these results to different choices of $n$.
+
+As a small percentage (less than 4%) of these games result in 
+a draw, we will use these draws to get each players current win history,
+before then removing these from the logistic regression model.
+Initially we will choose the previous $$n=10$$ games for each player to
+compute the win ratio, or the average of all current games if
+the historic number of games played is less than 10.
+
+
+```{r get historic win ratio}
+
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+      )) %>% 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
+                              roll_mean(focal_result, n = prev_n)))
+  hist_games
+}
+
+
+```
+
 
 
 ```{r, past-n-results}
 #| message: false
+#| eval: false
 
 ## given a players data, determine how many of the previous games they won
 ## do this for a single player first of all
@@ -196,6 +275,9 @@ user_games %>%
 ### get their games and then put it all back together afterwards?
 ### think that should work, just need to make it into a function then
 
+### modified this so that it calculates rolling averarge of previous n
+### games, or all games, when number of previous games is less than n
+
 
 get_hist <- function(user, games, prev_n) {
   hist_games <- games %>% 
@@ -209,7 +291,7 @@ get_hist <- function(user, games, prev_n) {
       (Result == "1/2-1/2") ~ 0.5,
       .default = 0
       )) %>% 
-    mutate(focal_win_prop = c(rep(0, prev_n - 1), 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
                               roll_mean(focal_result, n = prev_n)))
   
   hist_games
@@ -221,17 +303,25 @@ head(get_hist(user = curr_user, games = bullet_60, prev_n = 10))
 ## this seems to be working, then do it across a vector of
 ## players
 
+
+
 ```
 
 
+
+We can see the distribution of the win ratio for these 18 players across all
+games in this sample.
+
+
 ```{r}
+#| message: false
+
 ## want to use focal players not all players to get these lists to be the same
-a <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 17)
+focal_players <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 18)
 ## if don't use all focal players here then removing data because they won't be
 ## involved
 
-
-top_players <- names(a)
+top_players <- names(focal_players)
 
 
 tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 10) %>% 
@@ -239,22 +329,16 @@ tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 10) %>%
 
 
 tidy_games %>% 
-  mutate(focal_player = ifelse(focal_white == 1, White, Black)) %>% 
-  group_by(focal_player) %>% 
-  count() %>% 
-  arrange(-n)
-
-## why does this have 17 players rather than 25 then?
-## why are some missing?
+  ggplot(aes(focal_win_prop)) +
+  geom_histogram() +
+  labs(x = "Win Ratio", title = "Previous 10 Games")
 
 ```
 
 
-Now need to figure out how to feed this into a Stan model.
+Removing the drawn games, we have 12500 games involving these 18 focal players.
 
-```{r}
-head(tidy_games)
-
+```{r organize data for stan}
 
 init_data <- tidy_games %>% 
   mutate(WhiteElo = as.numeric(WhiteElo), 
@@ -265,20 +349,27 @@ init_data <- tidy_games %>%
   mutate(focal_id = match(focal_user, top_players)) %>% 
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
-  group_by(focal_id) %>% mutate(ave_prop = focal_win_prop - mean(focal_win_prop))
+  group_by(focal_id) %>% 
+  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
 
-init_data
-
-### will need
-### number of focal players
-### which focal player is in each row
-### their outcome 0 or 1
-### their colour white (1) or black (0)
-### ranking diff
+nrow(init_data)
 
 ```
 
+
+#### STAN Model
+
+Now we want to fit this multilevel logistic regression. Letting
+$y_{ij}$ be the result of the $i$-th game by the $j$-th focal player,
+then the model we will consider is.
+
+
+
+---
+
 ```{r}
+#| eval: false
 
 stan_data <- list(N = nrow(init_data),
                   J = length(top_players),
@@ -315,11 +406,12 @@ mcmc_hist(fit1$draws("beta"))
 Instead account for the covariates of colour and elo difference also.
 
 ```{r}
+#| eval: false
 stan_file <- "model2.stan"
 
-mod <- cmdstan_model(stan_file)
+mod2 <- cmdstan_model(stan_file)
 
-fit2 <- mod$sample(data = stan_data,
+fit2 <- mod2$sample(data = stan_data,
                   seed = 123,
                   chains = 4,
                   parallel_chains = 4,
@@ -349,18 +441,19 @@ mcmc_hist(fit2$draws(c("beta", "gamma1", "gamma2")))
 We can then instead include partial pooling of the $\beta$ coefficients.
 
 ```{r}
+#| eval: false
 stan_file <- "model3.stan"
 
-mod <- cmdstan_model(stan_file)
+mod3 <- cmdstan_model(stan_file)
 
-fit3 <- mod$sample(data = stan_data,
+fit3 <- mod3$sample(data = stan_data,
                   seed = 123,
                   chains = 4,
                   parallel_chains = 4,
                   refresh = 100)
 
 fit3$summary()
-mcmc_hist(fit3$draws(c("beta", "mu", "tau")))
+mcmc_hist(fit3$draws(c("beta", "mu", "tau", "gamma1", "gamma2")))
 
 
 mcmc_trace(fit3$draws(c("mu", "tau", "beta")))
@@ -371,7 +464,7 @@ mcmc_trace(fit3$draws(c("mu", "tau", "beta")))
 ## Repeat using normalized win Ratio
 
 ```{r}
-
+#| eval: false
 stan_data_ave <- list(N = nrow(init_data),
                   J = length(top_players),
                   y = init_data$focal_result,
@@ -401,6 +494,7 @@ mcmc_hist(fit1_ave$draws("beta"))
 ```
 
 ```{r}
+#| eval: false
 stan_file <- "model2.stan"
 
 mod <- cmdstan_model(stan_file)
@@ -418,6 +512,7 @@ mcmc_hist(fit2$draws(c("beta", "gamma1", "gamma2")))
 ```
 
 ```{r}
+#| eval: false
 stan_file <- "model3.stan"
 
 mod <- cmdstan_model(stan_file)
@@ -517,6 +612,7 @@ nrow(peng_games)
 
 ```{r}
 #| include: false
+#| eval: false
 
 ### get past n results
 

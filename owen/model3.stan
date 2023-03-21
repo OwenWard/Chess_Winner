@@ -1,13 +1,13 @@
-//
-// This Stan program defines a simple model, with a
-// vector of values 'y' modeled as normally distributed
-// with mean 'mu' and standard deviation 'sigma'.
-//
-// Learn more about model development with Stan at:
-//
-//    http://mc-stan.org/users/interfaces/rstan.html
-//    https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
-//
+// Model 3, March 21st
+// Very simple model for Chess data
+// logistic regression where
+// P(y_ij = 1) \propto 1/(1 + exp(-(alpha_j + beta_j x_{ij} + gamma z_{ij})))
+// for game i by player j
+// Fixed effects across both baseline (alpha), with a hierarchical prior
+// for effect of current streak (beta)
+// gamma common effects which account for the colour of the focal player
+// and the ELO difference between the focal and non focal player.
+// Model 2 and Model 3 appear to give largely similar results
 
 // The input data is a vector 'y' of length 'N'.
 data {
