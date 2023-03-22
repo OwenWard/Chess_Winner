@@ -12,7 +12,7 @@ bibliography: refs.bib
 ```{r setup}
 #| include: false
 
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 
 library(tidyverse)
 library(RcppRoll)
@@ -362,11 +362,314 @@ nrow(init_data)
 
 Now we want to fit this multilevel logistic regression. Letting
 $y_{ij}$ be the result of the $i$-th game by the $j$-th focal player,
-then the model we will consider is.
+then the model we will consider is
+
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + \gamma z_{ij}))}
+$$
+
+where:
+
+- $\alpha_j$ is a player level random effect
+- $\beta_j$ is a player level random effect, accounting for the win ratio $x_{ij}$
+- $\gamma$ is the coefficient of game level coefficients
 
 
+We then partially pool the $\alpha$ and $\beta$ coefficients, so
 
----
+$$
+\alpha_j \sim \mathcal{N}(\mu_1, \tau_1)
+$$
+$$
+\mu_1 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_1 \sim \mathcal{Cauchy}(0, 5)
+$$
+
+and similarly
+
+
+$$
+\beta_j \sim \mathcal{N}(\mu_2, \tau_2)
+$$
+$$
+\mu_2 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_2 \sim \mathcal{Cauchy}(0, 5)
+$$
+
+We rescale the win ratio $x_{ij}$, by the average win ration of
+player $j$. This means $\beta_j$ captures how a players win
+probability changes as their historic performance deviates from 
+the overall average win ratio.
+
+For $z_{ij}$ we incorporate 2 covariates, namely the colour of 
+the focal player and the ELO difference between the focal 
+player and their opponent. So that means we have 
+$\gamma_1$, which tells us how the win probability changes in going
+from black to white,
+and $\gamma_2$ gives how the win probability changes as the focal player
+has a better ELO than their opponent.
+
+
+```{r fit this model in stan}
+#| eval: false
+
+stan_data_ave <- list(N = nrow(init_data),
+                  J = length(top_players),
+                  y = init_data$focal_result,
+                  id = init_data$focal_id,
+                  colour = init_data$focal_white,
+                  elo = init_data$elo_diff,
+                  win_prop = init_data$ave_prop)
+
+
+stan_file <- "model3.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit3_ave <- mod$sample(data = stan_data_ave,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+fit3_ave$save_object("init_model_n10.RDS")
+```
+
+Some of the output of this model is shown below, namely the empirical posteriors
+for each of the parameters.
+
+```{r load in saved fit}
+#| message: false
+
+fit3_ave <- readRDS("init_model_n10.RDS")
+
+fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+
+rhat(fit3_ave)
+
+```
+
+
+#### Interpreting this output
+
+Given this output, we can get the probability a player who is black
+will win against an equally ranked player, when their current win ratio 
+is exactly their average will be $\frac{1}{1+\exp(-\alpha_j)}$.
+So a positive $\alpha_j$ indicates a player favoured to win 
+even when playing black. The overall $\mu_1$ tells us about the 
+global probability of winning as black against an equally ranked
+opponent.
+If a player
+is playing as white their win probability will be
+$\frac{1}{1+\exp(-(\alpha_j + \gamma_1))}$,
+so $\gamma_1$ being positive indicates the win
+probability increases when playing white, which makes sense.
+Playing white makes a player who has 50% chance of winning as black
+have approximately a 54% chance of winning with white. Wikipedia says the increase 
+in win probability from playing white has been estimated to be 
+4-6% so quite similar.
+
+Similarly, $\gamma_2$ tells us about how the ELO of the focal player 
+being larger than their opponent influences their win probability.
+The estimate here indicates that a large ELO difference makes a player very
+likely to win, as would be expected. For example, a player who
+has a 50% chance of winning against an opponent with the same ELO
+will have about a 56% of winning against an opponent with an ELO score
+100 points lower.
+
+### Varying History
+
+We can refit this using varying numbers of games for the
+current win ratio.
+
+```{r 5 prev games}
+#| eval: false
+
+tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 5) %>% 
+  as_tibble()
+
+init_data <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
+
+stan_data_ave <- list(N = nrow(init_data),
+                  J = length(top_players),
+                  y = init_data$focal_result,
+                  id = init_data$focal_id,
+                  colour = init_data$focal_white,
+                  elo = init_data$elo_diff,
+                  win_prop = init_data$ave_prop)
+
+
+stan_file <- "model3.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit3_ave <- mod$sample(data = stan_data_ave,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit3_ave$save_object("init_model_n5.RDS")
+
+```
+
+```{r}
+fit3_ave <- readRDS("init_model_n5.RDS")
+
+fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("beta", "gamma1", "gamma2")))
+```
+
+
+```{r 20 prev games}
+#| eval: false
+
+tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 20) %>% 
+  as_tibble()
+
+init_data <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
+
+stan_data_ave <- list(N = nrow(init_data),
+                  J = length(top_players),
+                  y = init_data$focal_result,
+                  id = init_data$focal_id,
+                  colour = init_data$focal_white,
+                  elo = init_data$elo_diff,
+                  win_prop = init_data$ave_prop)
+
+
+stan_file <- "model3.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit3_ave <- mod$sample(data = stan_data_ave,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+## this took 3 minutes
+
+fit3_ave$save_object("init_model_n20.RDS")
+
+```
+
+```{r}
+
+fit3_ave <- readRDS("init_model_n20.RDS")
+
+fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("beta", "mu1","gamma1", "gamma2")))
+```
+
+
+```{r prev 50 games}
+#| eval: false
+
+tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 50) %>% 
+  as_tibble()
+
+init_data <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
+
+stan_data_ave <- list(N = nrow(init_data),
+                  J = length(top_players),
+                  y = init_data$focal_result,
+                  id = init_data$focal_id,
+                  colour = init_data$focal_white,
+                  elo = init_data$elo_diff,
+                  win_prop = init_data$ave_prop)
+
+
+stan_file <- "model3.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit3_ave <- mod$sample(data = stan_data_ave,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit3_ave$save_object("init_model_n50.RDS")
+```
+
+
+```{r}
+#| message: false
+fit3_ave <- readRDS("init_model_n50.RDS")
+
+fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
+
+```
+
+
+Using a longer history seems to give a model which fits quicker and
+is more stable. But I'm not sure why that should be the case?
+
+The size of the winner effects does appear to decrease as you look
+at a longer amount of previous games. Unlikely to play more than 
+50 games in a row maybe? Still clear positive effects even 
+using 50 games.
+
+## Comments
+
+- There are some potential concerns with this Stan model and that it could
+be made more efficient and better parameterized. These seem to be a
+larger issue when the number of previous games used for the win ratio
+is smaller, which would make sense as these would depart more from the mean.
+
+- The size of these winner effects decreases as we look at their win ratio over
+more historic games.
+
+- Are there any other variables we should be controlling for here?
+
+
 
 ```{r}
 #| eval: false
@@ -403,8 +706,6 @@ mcmc_hist(fit1$draws("beta"))
 
 
 
-Instead account for the covariates of colour and elo difference also.
-
 ```{r}
 #| eval: false
 stan_file <- "model2.stan"
@@ -438,7 +739,6 @@ mcmc_hist(fit2$draws(c("beta", "gamma1", "gamma2")))
 ```
 
 
-We can then instead include partial pooling of the $\beta$ coefficients.
 
 ```{r}
 #| eval: false
@@ -461,7 +761,6 @@ mcmc_trace(fit3$draws(c("mu", "tau", "beta")))
 ```
 
 
-## Repeat using normalized win Ratio
 
 ```{r}
 #| eval: false
@@ -526,19 +825,11 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 fit3_ave$summary()
 
-mcmc_hist(fit3$draws(c("beta", "mu", "tau", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
 ```
 
 
-Given this output, we can get the probability a player who is black
-will win against and equally ranked player, when his current win ratio 
-is exactly his average will be $1-\exp(-\alpha_j)$ while if they 
-are playing as white their win probability will be
-$1-\exp(-(\alpha_j + \gamma_1))$, so $\gamma_1$ being positive indicates the win
-probability increases when playing white, which makes sense.
-Playing white makes a player who has 50% chance of winning as black
-have 54% chance of winning with white. Wikipedia says the difference is
-4-6% so similar enough.
 
 
 <!-- ## Streaks -->
