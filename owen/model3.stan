@@ -28,21 +28,29 @@ parameters {
   array[J] real beta;
   real gamma1;
   real gamma2;
-  real mu;
-  real tau;
+  real mu1;
+  real tau1;
+  real mu2;
+  real tau2;
 }
 
 
 model {
-  mu ~ normal(0, 5);
-  tau ~ cauchy(0, 5);
-  alpha ~ normal(0, 5);
-  beta ~ normal(mu, tau);
+  mu1 ~ normal(0, 5);
+  tau1 ~ cauchy(0, 5);
+  mu2 ~ normal(0, 5);
+  tau2 ~ cauchy(0, 5);
+  alpha ~ normal(mu2, tau2);
+  beta ~ normal(mu1, tau1);
   gamma1 ~ normal(0, 5);
   gamma2 ~ normal(0, 5);
+  vector[N] pred;
   for(i in 1:N){
-    y[i] ~ bernoulli_logit(alpha[id[i]] + beta[id[i]] * win_prop[i] +
-    gamma1 * colour[i] + gamma2 * elo[i]);
+    pred[i] = alpha[id[i]] + beta[id[i]] * win_prop[i] +
+    gamma1 * colour[i] + gamma2 * elo[i];
+    // y[i] ~ bernoulli_logit(alpha[id[i]] + beta[id[i]] * win_prop[i] +
+    // gamma1 * colour[i] + gamma2 * elo[i]);
   }
+  y ~ bernoulli_logit(pred);
 }
 
