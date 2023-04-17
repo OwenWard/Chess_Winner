@@ -2,9 +2,10 @@
 title: "Chess EDA"
 author: Owen G. Ward
 format: 
-  html:
-    toc: true
-    toc-location: left
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
 bibliography: refs.bib
 ---
 
@@ -34,7 +35,7 @@ are Standard Chess, with the regular rules, etc.
 ```{r}
 #| warning: false
 
-lichess_data <- readRDS("../rdata/lichess_pilot.RData")
+lichess_data <- readRDS("../../rdata/lichess_pilot.RData")
 ```
 
 
@@ -183,13 +184,15 @@ table(bullet_60$Result)
 Similar to @ding2021nhl, we wish to fit a multilevel logistic 
 regression to see if we can identify individual 
 effects for chess players in this data.
-We will incorporate fixed effects for the player effects of the focal
-player in these games, along 
+We will incorporate random effects for the player effects of the focal
+player in these games, along with random player level winner effects. 
+We take common fixed effects for the effect of colour and 
+the ELO difference.
 
 
 We will identify focal players as those who were used to query the API,
 i.e the `Username` for each game. We only consider Rated 60 second bullet games
-here, and use the top 18 players, who all play at least 100 games
+here initially, and use the top 18 players, who all play at least 100 games
 of 1 minute rated bullet chess in this dataset.
 
 We will consider the current history of an individual player
@@ -350,7 +353,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 nrow(init_data)
@@ -378,7 +381,7 @@ where:
 We then partially pool the $\alpha$ and $\beta$ coefficients, so
 
 $$
-\alpha_j \sim \mathcal{N}(\mu_1, \tau_1)
+\alpha_j \sim \mathcal{N}(\mu_2, \tau_2)
 $$
 $$
 \mu_1 \sim \mathcal{N}(0, 5)
@@ -391,7 +394,7 @@ and similarly
 
 
 $$
-\beta_j \sim \mathcal{N}(\mu_2, \tau_2)
+\beta_j \sim \mathcal{N}(\mu_1, \tau_1)
 $$
 $$
 \mu_2 \sim \mathcal{N}(0, 5)
@@ -426,7 +429,7 @@ stan_data_ave <- list(N = nrow(init_data),
                   win_prop = init_data$ave_prop)
 
 
-stan_file <- "model3.stan"
+stan_file <- "../model3.stan"
 
 mod <- cmdstan_model(stan_file)
 
@@ -436,7 +439,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                   parallel_chains = 4,
                   refresh = 100)
 
-fit3_ave$save_object("init_model_n10.RDS")
+fit3_ave$save_object("../model_fits/init_model_n10.RDS")
 ```
 
 Some of the output of this model is shown below, namely the empirical posteriors
@@ -445,7 +448,7 @@ for each of the parameters.
 ```{r load in saved fit}
 #| message: false
 
-fit3_ave <- readRDS("init_model_n10.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
 
 fit3_ave$summary()
 
@@ -481,7 +484,7 @@ being larger than their opponent influences their win probability.
 The estimate here indicates that a large ELO difference makes a player very
 likely to win, as would be expected. For example, a player who
 has a 50% chance of winning against an opponent with the same ELO
-will have about a 56% of winning against an opponent with an ELO score
+will have about a 61% chance of winning against an opponent with an ELO score
 100 points lower.
 
 ### Varying History
@@ -507,7 +510,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -519,7 +522,7 @@ stan_data_ave <- list(N = nrow(init_data),
                   win_prop = init_data$ave_prop)
 
 
-stan_file <- "model3.stan"
+stan_file <- "../model3.stan"
 
 mod <- cmdstan_model(stan_file)
 
@@ -530,12 +533,12 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                   refresh = 100)
 
 
-fit3_ave$save_object("init_model_n5.RDS")
+fit3_ave$save_object("../model_fits/init_model_n5.RDS")
 
 ```
 
 ```{r}
-fit3_ave <- readRDS("init_model_n5.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_n5.RDS")
 
 fit3_ave$summary()
 
@@ -561,7 +564,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -573,7 +576,7 @@ stan_data_ave <- list(N = nrow(init_data),
                   win_prop = init_data$ave_prop)
 
 
-stan_file <- "model3.stan"
+stan_file <- "../model3.stan"
 
 mod <- cmdstan_model(stan_file)
 
@@ -585,13 +588,13 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## this took 3 minutes
 
-fit3_ave$save_object("init_model_n20.RDS")
+fit3_ave$save_object("../model_fits/init_model_n20.RDS")
 
 ```
 
 ```{r}
 
-fit3_ave <- readRDS("init_model_n20.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_n20.RDS")
 
 fit3_ave$summary()
 
@@ -618,7 +621,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -630,7 +633,7 @@ stan_data_ave <- list(N = nrow(init_data),
                   win_prop = init_data$ave_prop)
 
 
-stan_file <- "model3.stan"
+stan_file <- "../model3.stan"
 
 mod <- cmdstan_model(stan_file)
 
@@ -641,13 +644,13 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                   refresh = 100)
 
 
-fit3_ave$save_object("init_model_n50.RDS")
+fit3_ave$save_object("../model_fits/init_model_n50.RDS")
 ```
 
 
 ```{r}
 #| message: false
-fit3_ave <- readRDS("init_model_n50.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_n50.RDS")
 
 fit3_ave$summary()
 
@@ -655,9 +658,6 @@ mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
 
 ```
 
-
-Using a longer history seems to give a model which fits quicker and
-is more stable. But I'm not sure why that should be the case?
 
 The size of the winner effects does appear to decrease as you look
 at a longer amount of previous games. Unlikely to play more than 
@@ -717,7 +717,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -728,7 +728,7 @@ stan_data_ave <- list(N = nrow(init_data),
                   elo = init_data$elo_diff,
                   win_prop = init_data$ave_prop)
 
-stan_file <- "model3.stan"
+# stan_file <- "../model3.stan"
 
 mod <- cmdstan_model(stan_file)
 
@@ -740,12 +740,12 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save this fit 
 
-fit3_ave$save_object("init_model_blitz_n5.RDS")
+fit3_ave$save_object("../model_fits/init_model_blitz_n5.RDS")
 
 ```
 
 ```{r}
-fit3_ave <- readRDS("init_model_blitz_n5.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_blitz_n5.RDS")
 
 fit3_ave$summary()
 
@@ -774,7 +774,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = focal_win_prop - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -785,9 +785,9 @@ stan_data_ave <- list(N = nrow(init_data),
                   elo = init_data$elo_diff,
                   win_prop = init_data$ave_prop)
 
-stan_file <- "model3.stan"
-
-mod <- cmdstan_model(stan_file)
+# stan_file <- "model3.stan"
+# 
+# mod <- cmdstan_model(stan_file)
 
 fit3_ave <- mod$sample(data = stan_data_ave,
                   seed = 123,
@@ -797,18 +797,18 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save this fit 
 
-fit3_ave$save_object("init_model_blitz_n20.RDS")
+fit3_ave$save_object("../model_fits/init_model_blitz_n20.RDS")
 
 
 ```
 
 
 ```{r}
-fit3_ave <- readRDS("init_model_blitz_n20.RDS")
+fit3_ave <- readRDS("../model_fits/init_model_blitz_n20.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
 ```
 
 When we consider more historic games the winner effects do appear to shrink,
@@ -819,15 +819,15 @@ well, but this can be fixed.
 
 ## Comments
 
-- There are some potential concerns with this Stan model and that it could
-be made more efficient and better parameterized. These seem to be a
-larger issue when the number of previous games used for the win ratio
-is smaller, which would make sense as these would depart more from the mean.
 
 - The size of these winner effects decreases as we look at their win ratio over
 more historic games.
 
 - Are there any other variables we should be controlling for here?
+
+- How data dependent is this result? Should investigate the
+performance across different players, the strength of the winner
+effect as a function of the ELO of a player, etc.
 
 
 ## Streaks
@@ -841,7 +841,7 @@ bullet and blitz data.
 
 
 ```{r}
-#| echo: true
+
 prev_data <- bullet_60 %>% 
   group_by(Username) %>% 
   arrange(UTCDate, UTCTime) %>% 
