@@ -466,9 +466,10 @@ Given this output, we can get the probability a player who is black
 will win against an equally ranked player, when their current win ratio 
 is exactly their average will be $\frac{1}{1+\exp(-\alpha_j)}$.
 So a positive $\alpha_j$ indicates a player favoured to win 
-even when playing black. The overall $\mu_1$ tells us about the 
+even when playing black. The overall $\mu_2$ tells us about the 
 global probability of winning as black against an equally ranked
-opponent.
+opponent, which is just below 0, indicating a slightly less than 50% 
+chance of winning.
 If a player
 is playing as white their win probability will be
 $\frac{1}{1+\exp(-(\alpha_j + \gamma_1))}$,
@@ -542,10 +543,11 @@ fit3_ave <- readRDS("../model_fits/init_model_n5.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 ```
 
-
+The posterior of these effects does seem to change somewhat 
+as we vary the history. This also seems to vary from player to player.
 We also consider the previous 20 games.
 
 ```{r 20 prev games}
@@ -598,7 +600,7 @@ fit3_ave <- readRDS("../model_fits/init_model_n20.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1","gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
 ```
 
 
@@ -654,15 +656,15 @@ fit3_ave <- readRDS("../model_fits/init_model_n50.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
 
 ```
 
 
 The size of the winner effects does appear to decrease as you look
 at a longer amount of previous games. Unlikely to play more than 
-50 games in a row maybe? Still clear positive effects even 
-using 50 games.
+50 games in a row maybe? It does appear that the mean
+for $\tau_2$ increases as we consider longer histories. 
 
 
 ### Longer Games
@@ -749,9 +751,15 @@ fit3_ave <- readRDS("../model_fits/init_model_blitz_n5.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 
 ```
+
+
+When we instead consider blitz games there seems to be considerably less
+evidence for these winner effects, with many of the $\beta$ parameters
+centered around 0 now. This seems reasonable, indicates
+smaller effects in longer games.
 
 
 We can also repeat this with the previous 20 blitz games as an example also.
@@ -808,20 +816,16 @@ fit3_ave <- readRDS("../model_fits/init_model_blitz_n20.RDS")
 
 fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 ```
 
-When we consider more historic games the winner effects do appear to shrink,
-as we saw in the bullet data. However, there seems to still be
-very strong evidence for some effect. This model does not fit as 
-well, but this can be fixed.
+
+This seems to mirror the smaller number of blitz games quite closely.
 
 
 ## Comments
 
 
-- The size of these winner effects decreases as we look at their win ratio over
-more historic games.
 
 - Are there any other variables we should be controlling for here?
 
