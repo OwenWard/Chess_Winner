@@ -1,4 +1,4 @@
-// Model 4, April 18th
+// Model 5, April 25th
 // Very simple model for Chess data
 // logistic regression where
 // P(y_ij = 1) \propto 1/(1 + exp(-(alpha_j + beta_j x_{ij} + gamma z_{ij})))
@@ -7,7 +7,7 @@
 // for effect of current streak (beta)
 // gamma common effects which account for the colour of the focal player
 // and the ELO difference between the focal and non focal player.
-// now x separated into single previous game and then n games before that
+// now x only single previous game
 
 
 
@@ -19,7 +19,7 @@ data {
   array[N] int<lower=1, upper = J> id; // indicating which focal player involved
   vector[N] colour; // the colour of the focal player
   vector[N] elo; // diff in elo scores between players
-  vector[N] win_prop; // current win ratio for focal
+  //vector[N] win_prop; // current win ratio for focal
   array[N] int<lower=0, upper=1> prev_game;
   
 }
@@ -28,12 +28,12 @@ data {
 // accepts two parameters 'mu' and 'sigma'.
 parameters {
   array[J] real alpha;
-  array[J] real beta;
+  // array[J] real beta;
   array[J] real delta; // the parameter for the single previous game
   real gamma1;
   real gamma2;
-  real mu1;
-  real tau1;
+  // real mu1;
+  // real tau1;
   real mu2;
   real tau2;
   real mu3;
@@ -42,20 +42,20 @@ parameters {
 
 
 model {
-  mu1 ~ normal(0, 5);
-  tau1 ~ cauchy(0, 5);
+  // mu1 ~ normal(0, 5);
+  // tau1 ~ cauchy(0, 5);
   mu2 ~ normal(0, 5);
   tau2 ~ cauchy(0, 5);
   mu3 ~ normal(0, 5);
   tau3 ~ normal(0, 5);
   alpha ~ normal(mu2, tau2);
-  beta ~ normal(mu1, tau1);
+  // beta ~ normal(mu1, tau1);
   delta ~ normal(mu3, tau3);
   gamma1 ~ normal(0, 5);
   gamma2 ~ normal(0, 5);
   vector[N] pred;
   for(i in 1:N){
-    pred[i] = alpha[id[i]] + beta[id[i]] * win_prop[i] +
+    pred[i] = alpha[id[i]] + //beta[id[i]] * win_prop[i] +
     gamma1 * colour[i] + gamma2 * elo[i] + delta[id[i]] * prev_game[i];
     // y[i] ~ bernoulli_logit(alpha[id[i]] + beta[id[i]] * win_prop[i] +
     // gamma1 * colour[i] + gamma2 * elo[i]);

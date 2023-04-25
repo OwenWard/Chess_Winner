@@ -3,10 +3,10 @@ title: "Model Checking"
 author: Owen G. Ward
 date: 04/17/2023
 format: 
-  # html:
-  #   toc: true
-  #   toc-location: left
-  pdf
+  html:
+    toc: true
+    toc-location: left
+  # pdf
 bibliography: refs.bib
 ---
 
@@ -19,12 +19,33 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 library(tidyverse)
 library(RcppRoll)
 library(cmdstanr)
+library(posterior)
 library(bayesplot)
 
 theme_set(theme_bw())
 
+
+prob_positive <- function(stan_draws, param = "beta") {
+  all_draws <- as_draws_df(stan_draws)
+  ndraws <- nrow(all_draws)
+  as_tibble(all_draws) %>% 
+  select(starts_with(param)) %>% 
+  apply(2, function(x) sum(x>0)/ndraws)
+}
+
 ```
 
+
+## Identifying Problems 
+
+An issue was identified with the current implementation,
+where the `previous_win_history` used, which was supposed to
+be the proportion of the past $n$ games won compared to the
+players overall win percentage, contained the result of the current game
+(the outcome). When this is corrected the strong equal positive winner
+effects are removed, and we now see a variable effect, 
+with some players still displaying positive winner effects. However,
+several of the players no longer show such an effect.
 
 
 ## Permuting Data
@@ -149,7 +170,7 @@ tidy_games %>%
 ```
 
 
-Now let's fit the stan model to the permuted data and investigate what
+Now we fit the stan model to the permuted data and investigate what
 the effects are.
 
 
@@ -169,7 +190,7 @@ perm_init_data <- perm_games %>%
   filter(perm_result != 0.5)
 
 
-perm_init_data
+# perm_init_data
 
 
 
@@ -211,30 +232,43 @@ fit3_ave <- readRDS("../model_fits/perm_model_n10.RDS")
 fit3_orig <- readRDS("../model_fits/init_model_n10.RDS")
 
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2"))) +
+  labs(title = "Permuted Data")
 
-mcmc_hist(fit3_orig$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+mcmc_hist(fit3_orig$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2"))) +
+  labs(title = "True Data")
+
 ```
 
-So, when we permute the data in this way, get the same winner/loser effects.
-This means its not a real effect. What could be causing this?
 
 
-- Weird data sample?
+```{r}
+#| echo: true
 
-- Not controlling for some other important predictors?
+## for the permuted data
+prob_positive(fit3_ave)
 
-- The magnitude of these effects is the same also, which indicates its a problem
+## for the real data
+prob_positive(fit3_orig)
 
-- Did I permute the data the right way then?
+```
+
+Permuted data gives effects which are all zero on average, which is reasonable.
+This would be expected as permuting the ordering of the games should
+remove any possible winner effects. Similarly, the 
+probability of positive effects is closer to 0.5, which
+would be expected under a model with no effects.
 
 
+Another way to confirm that having no history should lead to no 
+winner effects is shown below.
+We now replace the historic win proportion with uniform 
+draws on the interval $[-1, 1]$. The estimated winner effects 
+under such a history are shown below.
 
-What about if the history is simply uniform on the [-1, 1]. What sort of
-effects do you see then?
 
 ```{r}
 #| eval: false
@@ -262,14 +296,336 @@ fit3_rand$save_object(file = "../model_fits/unif_hist.RDS")
 ```
 
 
+We also see that the probability of these effects being positive is
+close to 0.5, as would be expected under this model.
+
 ```{r}
 
 fit3_rand <- readRDS("../model_fits/unif_hist.RDS")
 
 mcmc_hist(fit3_rand$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 
-fit3_rand$summary()
+# fit3_rand$summary()
+
+prob_positive(fit3_rand)
 
 ```
+
+
+
+## Separating out history
+
+We want to next look at the history as both the current win 
+streak, up to but not including the previous game, along with the result 
+of the previous game, to see if we can identify how potential winner 
+effects can be decomposed between these two components.
+
+We do this with a model of the form
+
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + 
+\delta_j x_{ij}^{*} + 
+\gamma z_{ij}))},
+$$
+
+where now $x_{ij}^{*}$ is the result of the __previous__ game
+played by player $j$, and $x_{ij}$ is their normalised 
+win ratio over the previous $n$ games, not including the single
+previous game.
+
+
+```{r get data for winner effects}
+
+hist_data_init <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, n = 2, default = 0) - 
+           mean(focal_win_prop),
+         prev_game = lag(focal_result, default = 0)) %>% 
+  filter(focal_result != 0.5)
+
+
+stan_data_hist <- list(N = nrow(hist_data_init),
+                  J = length(top_players),
+                  y = hist_data_init$focal_result,
+                  id = hist_data_init$focal_id,
+                  colour = hist_data_init$focal_white,
+                  elo = hist_data_init$elo_diff,
+                  win_prop = hist_data_init$ave_prop,
+                  prev_game = hist_data_init$prev_game)
+
+```
+
+
+```{r fit the stan model}
+#| eval: false
+
+stan_file <- "../model4.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit4 <- mod$sample(data = stan_data_hist,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit4$summary()
+
+
+fit4$save_object(file = "../model_fits/model4.RDS")
+
+```
+
+
+```{r load the stan fit}
+
+fit4 <- readRDS("../model_fits/model4.RDS")
+
+mcmc_hist(fit4$draws(c("delta"))) +
+  labs(title = "Effect of Previous Game")
+
+mcmc_hist(fit4$draws(c("beta"))) +
+  labs(title = "Effect of Previous n games, excluding most recent game")
+
+```
+
+This model seems to fit well, with no potential concerns also.
+
+We can then again compare these estimated effects. This 
+
+```{r check whether positive effects}
+#| echo: true
+
+## the beta parameters (previous n, not last game)
+prob_positive(fit4)
+
+
+## the delta parameters (single game) 
+prob_positive(fit4, param = "delta")
+```
+
+
+
+This seems to indicate that the previous game on its own does not have as clear
+an effect, but that the streak of previous games shows stronger evidence
+for a winner effect.
+
+## Consider all bullet games
+
+Previously we considered only 60 second bullet games. We wish to 
+consider if there is evidence for this effect across all bullet games.
+
+
+```{r get all bullet games}
+
+all_bullet <- lichess_data %>% 
+  filter(Event == "Rated Bullet game") 
+
+
+tidy_games <- map_dfr(top_players, get_hist, all_bullet, prev_n = 10) %>% 
+  as_tibble()
+
+
+tidy_games
+
+stan_data <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
+
+```
+
+
+```{r refit model 3 for all bullet}
+#| eval: false
+
+stan_data_ave <- list(N = nrow(stan_data),
+                  J = length(top_players),
+                  y = stan_data$focal_result,
+                  id = stan_data$focal_id,
+                  colour = stan_data$focal_white,
+                  elo = stan_data$elo_diff,
+                  win_prop = stan_data$ave_prop)
+
+
+stan_file <- "../model3.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit3_bullet <- mod$sample(data = stan_data_ave,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit3_bullet$save_object(file = "../model_fits/model3_n10_all_bullet.RDS")
+```
+
+
+```{r}
+fit3_bullet <- readRDS("../model_fits/model3_n10_all_bullet.RDS")
+
+mcmc_hist(fit3_bullet$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+
+prob_positive(fit3_bullet)
+```
+
+How do these estimates compare to those with only the 60 second games?
+The model with all bullet games has all posterior means greater than 0.
+There is not much of an overall change between the estimated mean
+effect sizes between the two datasets.
+Using all bullet games also leads to 
+smaller posterior standard deviations for the
+winner effect size for all players.
+
+
+```{r refit model 4 for all bullet games}
+#| eval: false
+
+hist_data_init <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, n = 2, default = 0) - 
+           mean(focal_win_prop),
+         prev_game = lag(focal_result, default = 0)) %>% 
+  filter(focal_result != 0.5)
+
+
+stan_data_hist <- list(N = nrow(hist_data_init),
+                  J = length(top_players),
+                  y = hist_data_init$focal_result,
+                  id = hist_data_init$focal_id,
+                  colour = hist_data_init$focal_white,
+                  elo = hist_data_init$elo_diff,
+                  win_prop = hist_data_init$ave_prop,
+                  prev_game = hist_data_init$prev_game)
+
+
+stan_file <- "../model4.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit4 <- mod$sample(data = stan_data_hist,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit4$summary()
+
+
+fit4$save_object(file = "../model_fits/model4_n10_all_bullet.RDS")
+
+```
+
+
+```{r examine this model fit}
+fit4 <- readRDS("../model_fits/model4_n10_all_bullet.RDS")
+
+
+mcmc_hist(fit4$draws(variables = c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+
+
+mcmc_hist(fit4$draws(variables = c("delta", "mu3", "tau3")))
+
+prob_positive(fit4)
+prob_positive(fit4, param = "delta")
+```
+
+
+## Just previous game
+
+We could also only use the previous game as a predictor, 
+without using the rest of the history.
+
+```{r}
+#| eval: false
+
+stan_data_hist <- list(N = nrow(hist_data_init),
+                  J = length(top_players),
+                  y = hist_data_init$focal_result,
+                  id = hist_data_init$focal_id,
+                  colour = hist_data_init$focal_white,
+                  elo = hist_data_init$elo_diff,
+                  prev_game = hist_data_init$prev_game)
+
+stan_file <- "../model5.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit5 <- mod$sample(data = stan_data_hist,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit5$save_object(file = "../model_fits/model5_n10_all_blitz.RDS")
+
+```
+
+
+```{r}
+fit5 <- readRDS("../model_fits/model5_n10_all_blitz.RDS")
+
+
+mcmc_hist(fit5$draws(variables = c("delta")))
+
+prob_positive(fit5, param = "delta")
+
+```
+
+Fitting using just the previous game as a predictor seems to give a reasonable
+model, with a similar interpretation as when we include the history also.
+
+For this model, a posterior mean value for delta of 0.25 corresponds to 7%
+increase in the win probability having won the previous game compared 
+to having lost it.
+
+Not clear if this difference is due to excluding the win
+history or due to using a larger/different dataset.
+
+
+
+### Next Steps
+
+
+- Can we compare the performance of these models, using loo-cv 
+or similar?
+
+- Could this model be parameterized better?
+
+- Any other possible problems with this?
+
+- What about some sort of mixture of the previous game and the others before 
+that?
+
+ - Some sort of decaying effect?
 
 

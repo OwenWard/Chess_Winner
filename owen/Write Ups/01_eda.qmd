@@ -2,10 +2,10 @@
 title: "Chess EDA"
 author: Owen G. Ward
 format: 
-  # html:
-  #   toc: true
-  #   toc-location: left
-  pdf
+  html:
+    toc: true
+    toc-location: left
+  # pdf
 bibliography: refs.bib
 ---
 
@@ -19,6 +19,7 @@ library(tidyverse)
 library(RcppRoll)
 library(cmdstanr)
 library(bayesplot)
+library(posterior)
 
 theme_set(theme_bw())
 
@@ -375,7 +376,7 @@ where:
 
 - $\alpha_j$ is a player level random effect
 - $\beta_j$ is a player level random effect, accounting for the win ratio $x_{ij}$
-- $\gamma$ is the coefficient of game level coefficients
+- $\gamma$ is a fixed effect of game level coefficients
 
 
 We then partially pool the $\alpha$ and $\beta$ coefficients, so
@@ -384,10 +385,10 @@ $$
 \alpha_j \sim \mathcal{N}(\mu_2, \tau_2)
 $$
 $$
-\mu_1 \sim \mathcal{N}(0, 5)
+\mu_2 \sim \mathcal{N}(0, 5)
 $$
 $$
-\tau_1 \sim \mathcal{Cauchy}(0, 5)
+\tau_2 \sim \mathcal{Cauchy}(0, 5)
 $$
 
 and similarly
@@ -397,10 +398,10 @@ $$
 \beta_j \sim \mathcal{N}(\mu_1, \tau_1)
 $$
 $$
-\mu_2 \sim \mathcal{N}(0, 5)
+\mu_1 \sim \mathcal{N}(0, 5)
 $$
 $$
-\tau_2 \sim \mathcal{Cauchy}(0, 5)
+\tau_1 \sim \mathcal{Cauchy}(0, 5)
 $$
 
 We rescale the win ratio $x_{ij}$, by the average win ration of
@@ -450,13 +451,17 @@ for each of the parameters.
 
 fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+```
 
-rhat(fit3_ave)
-
+The following metric (R-hat) indicates if the Bayesian model is
+converging. We would like values of smaller than 1.01 here, with values
+less than 1 possible in a sample. 
+```{r compute r-hat}
+bayesplot::rhat(fit3_ave)
 ```
 
 
@@ -487,6 +492,73 @@ likely to win, as would be expected. For example, a player who
 has a 50% chance of winning against an opponent with the same ELO
 will have about a 61% chance of winning against an opponent with an ELO score
 100 points lower.
+
+
+### How big are these effects
+
+We then want to quantify how much these estimated effects change the 
+expected win probability.
+We have seen the size of the effects above for the non history parameters.
+The largest posterior mean for a $\beta\approx 1.56$. Since the normalized win
+proportion is between -0.6 and 0.6, that means that for a game
+where this player has a 50% chance of winning with a normalized average win
+proportion of 0, if their normalized win proportion is 0.5, the
+win probability will increase by $\approx 19\%$.
+This would occur, for example, if they win 50% of their total games but have
+won all 10 of their last 10. This is a similar size effect to the 
+increase in win probability which would come from playing an 
+opponent with an ELO ranking that is 170 points lower.
+
+Similarly, a normalized win history 0.25 
+above average corresponds to a difference 
+of approximately 80 in ELO scores.
+
+The underlying parameter $\mu_1$ has posterior mean of 0.606. 
+A normalised win history of 0.25 with a winner effect of this size
+would increase the win probability by about 4%, a similar effect
+as playing as white instead of black, all other covariates being
+equal.
+
+
+### Probability of Positive Winner Effects
+
+For each of these players, we can use the posterior draws to
+estimate the posterior probability that $\beta >0$, i.e
+that there is a positive effect.
+
+```{r estimate prob beta positive}
+
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+
+# stan_draws <- fit3_ave$draws()
+# 
+# 
+# all_draws <- as_draws_df(stan_draws)
+# 
+# ndraws <- nrow(all_draws)
+# 
+# as_tibble(all_draws) %>% 
+#   select(starts_with("beta")) %>% 
+#   apply(2, function(x) sum(x>0)/ndraws)
+# 
+
+prob_positive <- function(stan_draws) {
+  all_draws <- as_draws_df(stan_draws)
+  ndraws <- nrow(all_draws)
+  as_tibble(all_draws) %>% 
+  select(starts_with("beta")) %>% 
+  apply(2, function(x) sum(x>0)/ndraws)
+}
+
+
+prob_positive(fit3_ave$draws())
+
+```
+
+We can then use this metric to compare how these winner effects change 
+as we change both the length of the history and the type of games used.
+
+
 
 ### Varying History
 
@@ -541,9 +613,12 @@ fit3_ave$save_object("../model_fits/init_model_n5.RDS")
 ```{r}
 fit3_ave <- readRDS("../model_fits/init_model_n5.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+
+
+prob_positive(fit3_ave$draws())
 ```
 
 The posterior of these effects does seem to change somewhat 
@@ -598,9 +673,12 @@ fit3_ave$save_object("../model_fits/init_model_n20.RDS")
 
 fit3_ave <- readRDS("../model_fits/init_model_n20.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
+
+
+prob_positive(fit3_ave$draws())
 ```
 
 
@@ -654,10 +732,11 @@ fit3_ave$save_object("../model_fits/init_model_n50.RDS")
 #| message: false
 fit3_ave <- readRDS("../model_fits/init_model_n50.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1","gamma1", "gamma2")))
 
+prob_positive(fit3_ave$draws())
 ```
 
 
@@ -749,10 +828,11 @@ fit3_ave$save_object("../model_fits/init_model_blitz_n5.RDS")
 ```{r}
 fit3_ave <- readRDS("../model_fits/init_model_blitz_n5.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 
+prob_positive(fit3_ave$draws())
 ```
 
 
@@ -814,13 +894,18 @@ fit3_ave$save_object("../model_fits/init_model_blitz_n20.RDS")
 ```{r}
 fit3_ave <- readRDS("../model_fits/init_model_blitz_n20.RDS")
 
-fit3_ave$summary()
+# fit3_ave$summary()
 
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+
+prob_positive(fit3_ave$draws())
 ```
 
 
 This seems to mirror the smaller number of blitz games quite closely.
+
+
+
 
 
 ## Comments
