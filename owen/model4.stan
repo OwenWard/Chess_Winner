@@ -63,3 +63,16 @@ model {
   y ~ bernoulli_logit(pred);
 }
 
+
+generated quantities {
+  vector[N] log_lik;
+  vector[N] y_rep;
+  for (n in 1:N) {
+    log_lik[n] = bernoulli_logit_lpmf(y[n] | alpha[id[n]] + 
+    beta[id[n]] * win_prop[n] +
+    gamma1 * colour[n] + gamma2 * elo[n] + delta[id[n]] * prev_game[n]);
+    y_rep[n] = bernoulli_logit_rng(alpha[id[n]] + 
+    beta[id[n]] * win_prop[n] +
+    gamma1 * colour[n] + gamma2 * elo[n] + delta[id[n]] * prev_game[n]);
+  }
+}

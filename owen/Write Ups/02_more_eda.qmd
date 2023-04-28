@@ -21,6 +21,7 @@ library(RcppRoll)
 library(cmdstanr)
 library(posterior)
 library(bayesplot)
+library(loo)
 
 theme_set(theme_bw())
 
@@ -48,7 +49,7 @@ with some players still displaying positive winner effects. However,
 several of the players no longer show such an effect.
 
 
-## Permuting Data
+### Permuting Data
 
 A quick sanity check on the existing model is to see if there are 
 still strong winner and loser effects present when we permute the 
@@ -311,6 +312,126 @@ prob_positive(fit3_rand)
 
 ```
 
+## Initial Model
+
+For completeness, we include the initial model output here again, to 
+show the results.
+
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + \gamma z_{ij}))}
+$$
+
+where:
+
+- $\alpha_j$ is a player level random effect
+- $\beta_j$ is a player level random effect, accounting for the win ratio $x_{ij}$
+- $\gamma$ is a fixed effect of game level coefficients
+
+
+We then partially pool the $\alpha$ and $\beta$ coefficients, so
+
+$$
+\alpha_j \sim \mathcal{N}(\mu_2, \tau_2)
+$$
+$$
+\mu_2 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_2 \sim \mathcal{Cauchy}(0, 5)
+$$
+
+and similarly
+
+
+$$
+\beta_j \sim \mathcal{N}(\mu_1, \tau_1)
+$$
+$$
+\mu_1 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_1 \sim \mathcal{Cauchy}(0, 5)
+$$
+
+We rescale the win ratio $x_{ij}$, by the average win ration of
+player $j$. This means $\beta_j$ captures how a players win
+probability changes as their historic performance deviates from 
+the overall average win ratio.
+
+For $z_{ij}$ we incorporate 2 covariates, namely the colour of 
+the focal player and the ELO difference between the focal 
+player and their opponent. So that means we have 
+$\gamma_1$, which tells us how the win probability changes in going
+from black to white,
+and $\gamma_2$ gives how the win probability changes as the focal player
+has a better ELO than their opponent.
+
+We show the posterior estimates for these parameters below.
+
+
+```{r load in initial model here}
+
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+
+# fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+```
+
+#### Interpreting this output
+
+Given this output, we can get the probability a player who is black
+will win against an equally ranked player, when their current win ratio 
+is exactly their average will be $\frac{1}{1+\exp(-\alpha_j)}$.
+So a positive $\alpha_j$ indicates a player favoured to win 
+even when playing black. The overall $\mu_2$ tells us about the 
+global probability of winning as black against an equally ranked
+opponent, which is just below 0, indicating a slightly less than 50% 
+chance of winning.
+If a player
+is playing as white their win probability will be
+$\frac{1}{1+\exp(-(\alpha_j + \gamma_1))}$,
+so $\gamma_1$ being positive indicates the win
+probability increases when playing white, which makes sense.
+Playing white makes a player who has 50% chance of winning as black
+have approximately a 54% chance of winning with white. Wikipedia says the increase 
+in win probability from playing white has been estimated to be 
+4-6% so quite similar.
+
+Similarly, $\gamma_2$ tells us about how the ELO of the focal player 
+being larger than their opponent influences their win probability.
+The estimate here indicates that a large ELO difference makes a player very
+likely to win, as would be expected. For example, a player who
+has a 50% chance of winning against an opponent with the same ELO
+will have about a 61% chance of winning against an opponent with an ELO score
+100 points lower.
+
+
+#### How big are these effects
+
+We then want to quantify how much these estimated effects change the 
+expected win probability.
+We have seen the size of the effects above for the non history parameters.
+The largest posterior mean for a $\beta\approx 1.56$. Since the normalized win
+proportion is between -0.6 and 0.6, that means that for a game
+where this player has a 50% chance of winning with a normalized average win
+proportion of 0, if their normalized win proportion is 0.5, the
+win probability will increase by $\approx 19\%$.
+This would occur, for example, if they win 50% of their total games but have
+won all 10 of their last 10. This is a similar size effect to the 
+increase in win probability which would come from playing an 
+opponent with an ELO ranking that is 170 points lower.
+
+Similarly, a normalized win history 0.25 
+above average corresponds to a difference 
+of approximately 80 in ELO scores.
+
+The underlying parameter $\mu_1$ has posterior mean of 0.606. 
+A normalised win history of 0.25 with a winner effect of this size
+would increase the win probability by about 4%, a similar effect
+as playing as white instead of black, all other covariates being
+equal.
 
 
 ## Separating out history
@@ -331,7 +452,8 @@ $$
 where now $x_{ij}^{*}$ is the result of the __previous__ game
 played by player $j$, and $x_{ij}$ is their normalised 
 win ratio over the previous $n$ games, not including the single
-previous game.
+previous game. Note that $x_{ij}^{*}$ is not normalised,
+so can take on values $0,0.5,1$.
 
 
 ```{r get data for winner effects}
@@ -364,7 +486,7 @@ stan_data_hist <- list(N = nrow(hist_data_init),
 ```
 
 
-```{r fit the stan model}
+```{r fit model 4}
 #| eval: false
 
 stan_file <- "../model4.stan"
@@ -386,6 +508,11 @@ fit4$save_object(file = "../model_fits/model4.RDS")
 ```
 
 
+When we fit this model we can see the posterior distributions 
+of these $\delta$ parameters, which correspond to the 
+role the __single previous__ game has in the 
+win probability for the next game.
+
 ```{r load the stan fit}
 
 fit4 <- readRDS("../model_fits/model4.RDS")
@@ -398,9 +525,16 @@ mcmc_hist(fit4$draws(c("beta"))) +
 
 ```
 
-This model seems to fit well, with no potential concerns also.
 
-We can then again compare these estimated effects. This 
+
+We can then again compare these estimated effects. Most of these $\delta$
+have posterior means between $[-0.2, 0.2]$. 
+$\delta=0.2$ corresponds to winning the previous game leading to an 
+increase in the win probability of 5%, while holding all 
+other variables fixed. 
+
+It is maybe not immediate how to compare the effect sizes for $\beta$ and 
+$\delta$ here.
 
 ```{r check whether positive effects}
 #| echo: true
@@ -418,6 +552,71 @@ prob_positive(fit4, param = "delta")
 This seems to indicate that the previous game on its own does not have as clear
 an effect, but that the streak of previous games shows stronger evidence
 for a winner effect.
+
+
+We will also fit another model, using only
+the previous game as history, to this same dataset.
+
+
+```{r model 5 bullet 60}
+#| eval: false
+
+hist_data_init <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, n = 2, default = 0) - 
+           mean(focal_win_prop),
+         prev_game = lag(focal_result, default = 0)) %>% 
+  filter(focal_result != 0.5)
+
+
+stan_data_hist <- list(N = nrow(hist_data_init),
+                  J = length(top_players),
+                  y = hist_data_init$focal_result,
+                  id = hist_data_init$focal_id,
+                  colour = hist_data_init$focal_white,
+                  elo = hist_data_init$elo_diff,
+                  prev_game = hist_data_init$prev_game)
+
+stan_file <- "../model5.stan"
+
+mod <- cmdstan_model(stan_file)
+
+fit5 <- mod$sample(data = stan_data_hist,
+                  seed = 123,
+                  chains = 4,
+                  parallel_chains = 4,
+                  refresh = 100)
+
+
+fit5$save_object(file = "../model_fits/model5.RDS")
+
+```
+
+
+We can see the estimated effects from this model below.
+
+```{r}
+fit5 <- readRDS("../model_fits/model5.RDS")
+
+mcmc_hist(fit5$draws(variables = c("delta", "mu3", "tau3", "gamma1", "gamma2")))
+prob_positive(fit5$draws(), param = "delta")
+```
+
+The estimated effect sizes for $\delta$ are very similar to those estimated
+under the previous model, indicating that including the 
+longer history provides an improvement over just the previous game 
+(particularly given the model comparison below).
+
+
+
 
 ## Consider all bullet games
 
@@ -559,7 +758,7 @@ prob_positive(fit4, param = "delta")
 ```
 
 
-## Just previous game
+#### Just previous game
 
 We could also only use the previous game as a predictor, 
 without using the rest of the history.
@@ -612,20 +811,258 @@ Not clear if this difference is due to excluding the win
 history or due to using a larger/different dataset.
 
 
+## Model Checking
 
-### Next Steps
+We now have a bunch of variations on the original model. We have fit these
+on both only 60 second games and all bullet games.
+We do some initial model checking, using only the
+smaller data initially (to speed up the computation).
 
 
-- Can we compare the performance of these models, using loo-cv 
-or similar?
+As a model check, we use each of the posterior draws to
+generate corresponding simulated outcomes, for each
+of the games, given the covariates.
+We can then use this to get a posterior predictive distribution
+for the number of games won by each of the players, which 
+we show in the histograms below. Each 
+red vertical line corresponds to the true
+number of games won by a player.
 
-- Could this model be parameterized better?
+We see that the true values are very plausible under each
+of these models and provide one reasonable sanity check.
 
-- Any other possible problems with this?
+
+```{r get data for this section}
+tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 10) %>% 
+  as_tibble()
+## For model 3
+
+init_data <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
+  filter(focal_result != 0.5)
+
+
+stan_data_ave <- list(N = nrow(init_data),
+                  J = length(top_players),
+                  y = init_data$focal_result,
+                  id = init_data$focal_id,
+                  colour = init_data$focal_white,
+                  elo = init_data$elo_diff,
+                  win_prop = init_data$ave_prop)
+
+## For model 4 and model 5
+
+hist_data_init <- tidy_games %>% 
+  mutate(WhiteElo = as.numeric(WhiteElo), 
+         BlackElo = as.numeric(BlackElo)) %>% 
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, 
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
+  mutate(focal_id = match(focal_user, top_players)) %>% 
+  select(focal_user, focal_id, focal_white, 
+         focal_win_prop, elo_diff, focal_result) %>% 
+  group_by(focal_id) %>% 
+  mutate(ave_prop = lag(focal_win_prop, n = 2, default = 0) - 
+           mean(focal_win_prop),
+         prev_game = lag(focal_result, default = 0)) %>% 
+  filter(focal_result != 0.5)
+
+
+stan_data_hist <- list(N = nrow(hist_data_init),
+                  J = length(top_players),
+                  y = hist_data_init$focal_result,
+                  id = hist_data_init$focal_id,
+                  colour = hist_data_init$focal_white,
+                  elo = hist_data_init$elo_diff,
+                  win_prop = hist_data_init$ave_prop,
+                  prev_game = hist_data_init$prev_game)
+
+```
+
+
+
+```{r load single model at a time for model checking}
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+
+
+fit3_samples <- as_draws_df(fit3_ave$draws())
+
+
+fit3_samp <- fit3_samples %>% 
+  select(!starts_with(c("log_lik", "yrep")))
+
+y_rep <- fit3_samples %>% select(starts_with("y_rep"))
+
+rm(fit3_samples)
+
+
+### then want to join this with the correct input, i.e player, etc
+
+
+y_rep_mod <- y_rep %>% 
+  rownames_to_column() %>%  
+  pivot_longer(-rowname) %>% 
+  pivot_wider(names_from=rowname, values_from=value) %>% 
+  ## remove the draws and chains here
+  mutate(focal_id = stan_data_ave$id)
+
+
+## what is the check here? number of games won by a player for each of
+## the posterior samples, compared to the number of games the actually won
+
+
+games_won <- y_rep_mod %>% 
+  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") %>% 
+  group_by(focal_id, draw) %>% 
+  summarise(games_won = sum(y)) 
+
+
+
+## then stick the true number of games on top of this and see how
+## it looks
+
+
+orig_data <- tibble(outcome = stan_data_ave$y,
+                    focal_id = stan_data_ave$id)
+
+orig_games_won <- orig_data %>% 
+  group_by(focal_id) %>% 
+  summarise(games_won = sum(outcome))
+
+
+games_won %>% 
+  ggplot(aes(x = games_won)) +
+  geom_histogram() +
+  facet_wrap(~focal_id, scales = "free") +
+  geom_vline(data = orig_games_won, 
+             mapping = aes(xintercept = games_won), col = "red") +
+  labs(title = "Model 3")
+
+
+## could get posterior predictive p-values here but they should all 
+## be fine, looks pretty decent,
+## smallest p-value is 0.06 here for id = 16
+
+```
+
+
+```{r repeat for model 4}
+
+fit4 <- readRDS("../model_fits/model4.RDS")
+
+fit4_samples <- as_draws_df(fit4$draws())
+
+y_rep <- fit4_samples %>% select(starts_with("y_rep"))
+
+rm(fit4_samples)
+
+
+y_rep_mod <- y_rep %>% 
+  rownames_to_column() %>%  
+  pivot_longer(-rowname) %>% 
+  pivot_wider(names_from=rowname, values_from=value) %>% 
+  ## remove the draws and chains here
+  mutate(focal_id = stan_data_hist$id)
+
+games_won <- y_rep_mod %>% 
+  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") %>% 
+  group_by(focal_id, draw) %>% 
+  summarise(games_won = sum(y)) 
+
+games_won %>% 
+  ggplot(aes(x = games_won)) +
+  geom_histogram() +
+  facet_wrap(~focal_id, scales = "free") +
+  geom_vline(data = orig_games_won, 
+             mapping = aes(xintercept = games_won), col = "red") +
+  labs(title = "Model 4")
+
+## this model looks event better than model 3
+
+```
+
+
+```{r repeat this posterior check for model 5}
+
+fit5 <- readRDS("../model_fits/model5.RDS")
+
+
+fit5_samples <- as_draws_df(fit5$draws())
+
+y_rep <- fit5_samples %>% select(starts_with("y_rep"))
+
+rm(fit5_samples)
+
+
+y_rep_mod <- y_rep %>% 
+  rownames_to_column() %>%  
+  pivot_longer(-rowname) %>% 
+  pivot_wider(names_from=rowname, values_from=value) %>% 
+  ## remove the draws and chains here
+  mutate(focal_id = stan_data_hist$id)
+
+games_won <- y_rep_mod %>% 
+  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") %>% 
+  group_by(focal_id, draw) %>% 
+  summarise(games_won = sum(y)) 
+
+games_won %>% 
+  ggplot(aes(x = games_won)) +
+  geom_histogram() +
+  facet_wrap(~focal_id, scales = "free") +
+  geom_vline(data = orig_games_won, 
+             mapping = aes(xintercept = games_won), col = "red") +
+  labs(title = "Model 5")
+
+```
+
+Model 5 appears to look as good as model 4, in terms
+of posterior predictive distribution for the output.
+
+### Model comparison
+
+Finally, we also consider some model comparison
+between these 3 proposed models. Here we
+compute the leave one out cross validation.
+This allows us to compare across the models, with
+the general rule of thumb being a difference 
+of more than 2 standard errors indicates a better model.
+
+
+```{r}
+#| cache: true
+comp <- loo_compare(fit3_ave$loo(), fit4$loo(), fit5$loo())
+
+comp
+
+## this indicated model 2 slightly better than model 4, clearly better than
+## model 3
+
+```
+
+Here we see that the second model, including both the previous game
+and
+the $n$ games before that, is an improvement over the other 
+two models. The model which considers only the single previous game
+is closer.
+
+
+
+## Further Ideas
 
 - What about some sort of mixture of the previous game and the others before 
 that?
 
- - Some sort of decaying effect?
+- Some sort of decaying effect?
 
-
+- Is there an interaction between the winner effect and the ability
+of the player, in terms of their ELO score?
