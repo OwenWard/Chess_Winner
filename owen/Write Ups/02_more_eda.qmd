@@ -3,10 +3,10 @@ title: "Model Checking"
 author: Owen G. Ward
 date: 04/17/2023
 format: 
-  html:
-    toc: true
-    toc-location: left
-  # pdf
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
 bibliography: refs.bib
 ---
 
@@ -379,6 +379,13 @@ mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
 mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
 ```
 
+
+```{r prob positive fit3 beta}
+#| echo: true
+prob_positive(fit3_ave$draws())
+```
+
+
 #### Interpreting this output
 
 Given this output, we can get the probability a player who is black
@@ -607,6 +614,11 @@ We can see the estimated effects from this model below.
 fit5 <- readRDS("../model_fits/model5.RDS")
 
 mcmc_hist(fit5$draws(variables = c("delta", "mu3", "tau3", "gamma1", "gamma2")))
+
+```
+
+```{r}
+#| echo: true
 prob_positive(fit5$draws(), param = "delta")
 ```
 
@@ -625,9 +637,8 @@ consider if there is evidence for this effect across all bullet games.
 
 
 ```{r get all bullet games}
-
-all_bullet <- lichess_data %>% 
-  filter(Event == "Rated Bullet game") 
+all_bullet <- lichess_data %>%
+  filter(Event == "Rated Bullet game")
 
 
 tidy_games <- map_dfr(top_players, get_hist, all_bullet, prev_n = 10) %>% 
@@ -679,6 +690,8 @@ fit3_bullet$save_object(file = "../model_fits/model3_n10_all_bullet.RDS")
 ```
 
 
+#### First Model all Bullet
+
 ```{r}
 fit3_bullet <- readRDS("../model_fits/model3_n10_all_bullet.RDS")
 
@@ -695,6 +708,7 @@ Using all bullet games also leads to
 smaller posterior standard deviations for the
 winner effect size for all players.
 
+#### Separating out History
 
 ```{r refit model 4 for all bullet games}
 #| eval: false

@@ -3,7 +3,7 @@
 // logistic regression where
 // P(y_ij = 1) \propto 1/(1 + exp(-(alpha_j + beta_j x_{ij} + gamma z_{ij})))
 // for game i by player j
-// Fixed effects across both baseline (alpha), with a hierarchical prior
+// Random effects across both baseline (alpha), with a hierarchical prior
 // for effect of current streak (beta)
 // gamma common effects which account for the colour of the focal player
 // and the ELO difference between the focal and non focal player.
