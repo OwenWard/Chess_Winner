@@ -2,10 +2,10 @@
 title: "Chess EDA"
 author: Owen G. Ward
 format: 
-  html:
-    toc: true
-    toc-location: left
-  # pdf
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
 bibliography: refs.bib
 ---
 
