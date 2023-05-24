@@ -27,3 +27,5 @@ fit2 <- mod2$sample(data = stan_data_all,
 fit2$summary()
 
 fit2$save_object(file = here("owen", "cluster_scripts", "Cluster_stan.RDS"))
+
+
