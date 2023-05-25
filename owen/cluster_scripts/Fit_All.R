@@ -22,8 +22,13 @@ fit2 <- mod2$sample(data = stan_data_all,
                     seed = 123,
                     chains = 4,
                     parallel_chains = 4,
-                    refresh = 100, iter)
+                    refresh = 100,
+		                iter_warmup = 2000, 
+		                iter_sampling = 2000)
+
 
 fit2$summary()
 
 fit2$save_object(file = here("owen", "cluster_scripts", "Cluster_stan.RDS"))
+
+
