@@ -22,6 +22,7 @@ library(cmdstanr)
 library(posterior)
 library(bayesplot)
 library(loo)
+library(here)
 
 options(mc.cores = parallel::detectCores())
 
@@ -70,7 +71,7 @@ get_hist <- function(user, games, prev_n) {
       .default = 0
       )) %>% 
     mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))s
+                              roll_mean(focal_result, n = prev_n)))
   hist_games
 }
 
@@ -250,7 +251,9 @@ players <- unique(all_players)
 ## then just get all the history for this
 all_hist <- map_dfr(players, get_hist_opp, bullet_60, prev_n = 5) %>% 
   as_tibble() %>% 
-  select(game_id:player)
+  select(game_id:player, UTCDate, UTCTime)
+
+min_hist <- all_hist %>% select(game_id:player)
 
 ## this should have each game appear twice, for each of the two players
 ## involved, so need to figure out how to handle that best
@@ -259,21 +262,29 @@ all_hist <- map_dfr(players, get_hist_opp, bullet_60, prev_n = 5) %>%
 
 
 tidy_stan <- tidy_bullet %>% 
-  left_join(all_hist, by = c("game_id", "Username" = "player")) %>% 
+  left_join(min_hist, by = c("game_id", "Username" = "player")) %>% 
   arrange(UTCDate, UTCTime) %>% 
   rename(focal_result = opp_result, focal_win_prop = opp_win_prop) %>% 
-  left_join(all_hist, by = c("game_id", "opponent" = "player")) %>% 
+  left_join(min_hist, by = c("game_id", "opponent" = "player")) %>% 
   as_tibble() 
 
 ## this is all good, just need to lag both and add them in,
 ## and also get the ids for the stan code
 
 
-## getting the overall win probabilities for each player also
+## getting the overall current win probabilities for each player also, 
+## up to and including the current game
 
 player_avg <- all_hist %>% 
   group_by(player) %>% 
-  summarise(overall_avg = mean(opp_result))
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
+  mutate(nrow = row_number()) %>% 
+  mutate(curr_avg = cumsum(opp_result)/nrow) %>% 
+  select(game_id, player, curr_avg)
+
+global_avg <- all_hist %>% 
+  group_by(player) %>% 
+  summarise(total_avg = mean(opp_result))
 
 ## then just join this in also to use it
 
@@ -286,39 +297,61 @@ player_avg <- all_hist %>%
 
 
 final_data <- tidy_stan %>% 
-  left_join(player_avg, by = c("Username" = "player")) %>% 
-  rename(focal_avg = overall_avg) %>% 
-  left_join(player_avg, by = c("opponent" = "player")) %>% 
-  rename(opp_avg = overall_avg) %>% 
+  left_join(player_avg, by = c("Username" = "player", "game_id")) %>% 
+  rename(focal_avg = curr_avg) %>% 
+  left_join(player_avg, by = c("opponent" = "player", "game_id")) %>% 
+  rename(opp_avg = curr_avg) %>% 
   group_by(Username) %>% 
   arrange(UTCDate, UTCTime) %>% 
-  mutate(focal_prev_result = lag(focal_result, default = 0)) %>% 
+  mutate(focal_prev_result = lag(focal_result, default = 0),
+         focal_runn_avg = lag(focal_avg, n = 2, default = 0)) %>% 
   ungroup() %>% 
   group_by(opponent) %>% 
   arrange(UTCDate, UTCTime) %>% 
-  mutate(opp_prev_result = lag(opp_result, default = 0)) %>% 
+  mutate(opp_prev_result = lag(opp_result, default = 0),
+         opp_runn_avg = lag(opp_avg, n = 2, default = 0)) %>% 
   ungroup() %>% 
   mutate(focal_id = match(Username, players),
          opp_id = match(opponent, players)) %>% 
-  filter(focal_result != 0.5)
+  filter(focal_result != 0.5) %>% 
+  select(-focal_avg, - opp_avg, - opp_result, 
+         - focal_win_prop, - opp_win_prop)
+
+final_data
+## remove some unused columns
+
+norm_data <- final_data %>% 
+  left_join(global_avg, by = c("Username" = "player")) %>% 
+  rename(focal_global_avg = total_avg) %>% 
+  left_join(global_avg, by = c("opponent" = "player")) %>% 
+  rename(opp_global_avg = total_avg) %>% 
+  mutate(focal_prev_result = focal_prev_result - focal_global_avg,
+         focal_runn_avg = focal_runn_avg - focal_global_avg,
+         opp_prev_result = opp_prev_result - opp_global_avg,
+         opp_runn_avg = opp_runn_avg - opp_global_avg)
 
 ```
+
+Now this matches nicely, contains their historic winning average up to 2 games
+previously, along with their result in the previous game.
+
+Note that this has not been standardized currently.
 
 
 ```{r}
 
-final_data
+norm_data
 
 
-stan_data_all <- list(N = nrow(final_data),
+stan_data_all <- list(N = nrow(norm_data),
                       J = length(players),
-                      y = final_data$focal_result,
-                      focal_id = final_data$focal_id,
-                      opp_id = final_data$opp_id,
-                      focal_prev = final_data$focal_prev_result,
-                      opp_prev = final_data$opp_prev_result,
-                      focal_avg = final_data$focal_avg,
-                      opp_avg = final_data$opp_avg)
+                      y = norm_data$focal_result,
+                      focal_id = norm_data$focal_id,
+                      opp_id = norm_data$opp_id,
+                      focal_prev = norm_data$focal_prev_result,
+                      opp_prev = norm_data$opp_prev_result,
+                      focal_avg = norm_data$focal_runn_avg,
+                      opp_avg = norm_data$opp_runn_avg)
 
 
 saveRDS(stan_data_all, file = "../cluster_scripts/stan_data.RDS")
@@ -337,4 +370,73 @@ fit2 <- mod2$sample(data = stan_data_all,
 
 
 ```
+
+
+## Fitting this to all data
+
+Fit this model to all data on the cluster, just to see the results.
+The traceplots and R-hat for this model indicates it doesn't work well,
+does not converge.
+
+
+
+## Comparing models on smaller data
+
+Is there a small subset of players who play each other often that we can
+use in the dataset that can be used to compare these models?
+
+
+```{r}
+
+bullet_60 %>% 
+  filter(White %in% focal_players) %>% 
+  filter(Black %in% focal_players)
+
+## no games between any of the players used to scrape the data
+## would maybe need to get more players then, to use this for a comparison
+
+```
+
+
+```{r}
+library(chessR)
+
+
+chessdotcom_leaders <- chessdotcom_leaderboard(game_type = "live_bullet")
+
+top_bullet <- chessdotcom_leaders %>% top_n(10, wt = -rank) %>% 
+  select(player_id, username)
+
+
+chessdotcom_hikaru_recent <- get_raw_chessdotcom(usernames = "Hikaru",
+                                                 year_month = c(202201:202205))
+
+
+jan_games <- top_bullet$username %>% 
+  map_dfr(~get_raw_chessdotcom(.x, year_month = 202201))
+
+
+
+top_games <- jan_games %>% 
+  filter(White %in% top_bullet$username) %>% 
+  filter(Black %in% top_bullet$username)
+
+
+## get 500 games here then for 1 month, probably enough to fit an initial model
+## most of these games bullet too, so could use that
+
+top_games %>% 
+  group_by(White, Black, TimeClass) %>% 
+  tally() %>% 
+  arrange(-n)
+
+
+top_games %>% 
+  filter(TimeClass == "blitz")
+
+
+```
+
+
+
 

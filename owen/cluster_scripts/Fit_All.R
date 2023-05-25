@@ -5,6 +5,8 @@
 
 library(cmdstanr)
 
+options(mc.cores = parallel::detectCores())
+
 library(tidyverse)
 library(here)
 
@@ -20,7 +22,7 @@ fit2 <- mod2$sample(data = stan_data_all,
                     seed = 123,
                     chains = 4,
                     parallel_chains = 4,
-                    refresh = 100)
+                    refresh = 100, iter)
 
 fit2$summary()
 
