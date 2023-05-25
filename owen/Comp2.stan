@@ -7,6 +7,8 @@
 // for game i by player j
 // Random effects across baseline of focal player (alpha)
 // and fixed effect of prev game for focal (beta) and opponent (gamma)
+// here these are scaled to relative difference from global average
+// for each player
 
 
 
@@ -17,10 +19,10 @@ data {
   array[N] int<lower=0, upper=1> y; // the outcome of each game
   array[N] int<lower=1, upper=J> focal_id; // indicating which focal player involved
   array[N] int<lower=1, upper=J> opp_id;
-  array[N] int<lower=0, upper=1> focal_prev; // focals prev result
-  array[N] int<lower=0, upper=1> opp_prev; // opponents prev result, if known
-  array[N] real<lower=0, upper=1> focal_avg; // overall average for focal
-  array[N] real<lower=0, upper=1> opp_avg; // overall average for opponent
+  array[N] real<lower=-1, upper=1> focal_prev; // focals prev result
+  array[N] real<lower=-1, upper=1> opp_prev; // opponents prev result, if known
+  array[N] real<lower=-1, upper=1> focal_avg; // overall average for focal
+  array[N] real<lower=-1, upper=1> opp_avg; // overall average for opponent
 }
 
 // The parameters accepted by the model.
