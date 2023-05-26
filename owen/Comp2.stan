@@ -10,6 +10,8 @@
 // here these are scaled to relative difference from global average
 // for each player
 
+// May 26th, modify this to add generated quantities also
+
 
 
 // The input data is a vector 'y' of length 'N'.
@@ -59,3 +61,19 @@ model {
   y ~ bernoulli_logit(pred);
 }
 
+
+generated quantities {
+  vector[N] log_lik;
+  vector[N] y_rep;
+  for (i in 1:N) {
+    log_lik[i] = bernoulli_logit_lpmf(y[i] | alpha[focal_id[i]] + 
+    alpha[opp_id[i]] + beta[focal_id[i]] * 
+    focal_avg[i] + gamma[focal_id[i]] * (focal_prev[i] - focal_avg[i]) +
+    beta[opp_id[i]] * opp_avg[i] + gamma[opp_id[i]] * (opp_prev[i] - 
+    opp_avg[i]));
+    y_rep[i] = bernoulli_logit_rng(alpha[focal_id[i]] + alpha[opp_id[i]] + beta[focal_id[i]] * 
+    focal_avg[i] + gamma[focal_id[i]] * (focal_prev[i] - focal_avg[i]) +
+    beta[opp_id[i]] * opp_avg[i] + gamma[opp_id[i]] * (opp_prev[i] - 
+    opp_avg[i]));
+  }
+}
