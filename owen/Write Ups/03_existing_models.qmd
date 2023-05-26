@@ -378,6 +378,21 @@ Fit this model to all data on the cluster, just to see the results.
 The traceplots and R-hat for this model indicates it doesn't work well,
 does not converge.
 
+```{r}
+stan_fit <- readRDS("../cluster_scripts/Cluster_stan.RDS")
+
+mcmc_hist(stan_fit$draws(c("alpha[1]", "alpha[2]")))
+
+r_hat <- rhat(stan_fit)
+
+summary(r_hat)
+
+which(r_hat > 1.15)
+## just problems with mu and tau for convergence here, otherwise good?
+
+```
+
+
 
 
 ## Comparing models on smaller data
@@ -408,16 +423,16 @@ top_bullet <- chessdotcom_leaders %>% top_n(10, wt = -rank) %>%
   select(player_id, username)
 
 
-chessdotcom_hikaru_recent <- get_raw_chessdotcom(usernames = "Hikaru",
-                                                 year_month = c(202201:202205))
+# chessdotcom_hikaru_recent <- get_raw_chessdotcom(usernames = "Hikaru",
+#                                                  year_month = c(202201:202205))
 
 
-jan_games <- top_bullet$username %>% 
-  map_dfr(~get_raw_chessdotcom(.x, year_month = 202201))
+games_22 <- top_bullet$username %>% 
+  map_dfr(~get_raw_chessdotcom(.x, year_month = c(202201:202203)))
 
 
 
-top_games <- jan_games %>% 
+top_games <- games_22 %>% 
   filter(White %in% top_bullet$username) %>% 
   filter(Black %in% top_bullet$username)
 
@@ -431,9 +446,11 @@ top_games %>%
   arrange(-n)
 
 
-top_games %>% 
-  filter(TimeClass == "blitz")
+bullet_games <- top_games %>% 
+  filter(TimeClass == "bullet")
 
+
+bullet_top10 <- saveRDS(bullet_games, file = "chess_com_bullet_10.RDS")
 
 ```
 
