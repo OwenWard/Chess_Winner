@@ -26,7 +26,7 @@ data {
   array[N] real<lower=-1, upper=1> opp_prev; // opponents prev result, if known
   array[N] real<lower=-1, upper=1> focal_avg; // overall average for focal
   array[N] real<lower=-1, upper=1> opp_avg; // overall average for opponent
-  vector[N] elo; // difference in elo score from focal to opponent
+  vector[N] elo_diff; // difference in elo score from focal to opponent
   vector[N] colour; // the colour of the focal player (1 white, 0 black)
   
 }
@@ -64,7 +64,7 @@ model {
     pred[i] = alpha[focal_id[i]] + alpha[opp_id[i]] + beta[focal_id[i]] * 
     focal_avg[i] + gamma[focal_id[i]] * (focal_prev[i] - focal_avg[i]) +
     beta[opp_id[i]] * opp_avg[i] + gamma[opp_id[i]] * (opp_prev[i] - 
-    opp_avg[i]) + delta1 * elo[i] + delta2 * colour[i];
+    opp_avg[i]) + delta1 * elo_diff[i] + delta2 * colour[i];
   }
   y ~ bernoulli_logit(pred);
 }
@@ -78,10 +78,10 @@ generated quantities {
     alpha[opp_id[i]] + beta[focal_id[i]] * 
     focal_avg[i] + gamma[focal_id[i]] * (focal_prev[i] - focal_avg[i]) +
     beta[opp_id[i]] * opp_avg[i] + gamma[opp_id[i]] * (opp_prev[i] - 
-    opp_avg[i]) + delta1 * elo[i] + delta2 * colour[i]);
+    opp_avg[i]) + delta1 * elo_diff[i] + delta2 * colour[i]);
     y_rep[i] = bernoulli_logit_rng(alpha[focal_id[i]] + alpha[opp_id[i]] + beta[focal_id[i]] * 
     focal_avg[i] + gamma[focal_id[i]] * (focal_prev[i] - focal_avg[i]) +
     beta[opp_id[i]] * opp_avg[i] + gamma[opp_id[i]] * (opp_prev[i] - 
-    opp_avg[i]) + delta1 * elo[i] + delta2 * colour[i]);
+    opp_avg[i]) + delta1 * elo_diff[i] + delta2 * colour[i]);
   }
 }
