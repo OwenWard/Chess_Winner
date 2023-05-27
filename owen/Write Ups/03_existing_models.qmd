@@ -1,7 +1,7 @@
 ---
 title: "Model Checking"
 author: Owen G. Ward
-date: 04/17/2023
+date: 05/26/2023
 format: 
   # html:
   #   toc: true
@@ -10,11 +10,14 @@ format:
 bibliography: refs.bib
 ---
 
+This document will summarise what has been done so far.
+
+
 
 ```{r setup}
 #| include: false
 
-knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.width = 8)
 
 library(tidyverse)
 library(RcppRoll)
@@ -40,41 +43,254 @@ prob_positive <- function(stan_draws, param = "beta") {
 ```
 
 
-## Model Comparison
+## Initial Models Fit
 
-We want to compare these potential models, which is very similar
-to the model we fit previously.
-The only change is that we now need the history for
-both players, not just the focal player.
+Based on @ding2021nhl, an initial model proposed was of the form
 
-```{r load in the initial data}
-#| cache: true
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + \gamma z_{ij}))}
+$$
+
+where this is the probability of the **j-th focal player** 
+winning their **i-th game**. Here:
+
+- $\alpha_j$ is a player level random effect
+- $\beta_j$ is a player level random effect, accounting for the win ratio $x_{ij}$
+of the focal player over their previous $n$ games
+- $\gamma$ is a fixed effect of game level coefficients
 
 
-lichess_data <- readRDS("../../rdata/lichess_pilot.RData")
+We then partially pool the $\alpha$ and $\beta$ coefficients, so
 
-bullet_60 <- lichess_data %>% 
-  filter(Event == "Rated Bullet game") %>% 
-  filter(TimeControl == "60+0") %>% 
-  mutate(game_id = row_number())
+$$
+\alpha_j \sim \mathcal{N}(\mu_2, \tau_2)
+$$
+$$
+\mu_2 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_2 \sim \mathcal{Cauchy}(0, 5)
+$$
 
-get_hist <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
-    select(White:BlackElo, focal_white, game_id) %>% 
-    mutate(focal_result = case_when(
-      (focal_white == 1 & Result == "1-0") ~ 1,
-      (focal_white == 0 & Result == "0-1") ~ 1,
+and similarly
+
+
+$$
+\beta_j \sim \mathcal{N}(\mu_1, \tau_1)
+$$
+$$
+\mu_1 \sim \mathcal{N}(0, 5)
+$$
+$$
+\tau_1 \sim \mathcal{Cauchy}(0, 5)
+$$
+
+We rescale the win ratio $x_{ij}$, by the average win ratio of
+player $j$ across all 
+games they play in the dataset.
+This means $\beta_j$ captures how a players win
+probability changes as their historic performance deviates from 
+the overall average win ratio.
+
+For $z_{ij}$ we incorporate 2 covariates, namely the colour of 
+the focal player and the ELO difference between the focal 
+player and their opponent. So that means we have 
+$\gamma_1$, which tells us how the win probability changes in going
+from black to white,
+and $\gamma_2$ gives how the win probability changes as the focal player
+has a better ELO than their opponent.
+
+We can show this result, taking the original lichess data
+and the 18 players with the most games as focal players.
+
+```{r load in initial model here}
+
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+
+# fit3_ave$summary()
+
+mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+```
+
+#### Interpreting this output
+
+Given this output, we can get the probability a player who is black
+will win against an equally ranked player, when their current win ratio 
+is exactly their average will be $\frac{1}{1+\exp(-\alpha_j)}$.
+So a positive $\alpha_j$ indicates a player favoured to win 
+even when playing black. The overall $\mu_2$ tells us about the 
+global probability of winning as black against an equally ranked
+opponent, which is just below 0, indicating a slightly less than 50% 
+chance of winning.
+If a player
+is playing as white their win probability will be
+$\frac{1}{1+\exp(-(\alpha_j + \gamma_1))}$,
+so $\gamma_1$ being positive indicates the win
+probability increases when playing white, which makes sense.
+Playing white makes a player who has 50% chance of winning as black
+have approximately a 54% chance of winning with white. Wikipedia says the increase 
+in win probability from playing white has been estimated to be 
+4-6% so quite similar.
+
+Similarly, $\gamma_2$ tells us about how the ELO of the focal player 
+being larger than their opponent influences their win probability.
+The estimate here indicates that a large ELO difference makes a player very
+likely to win, as would be expected. For example, a player who
+has a 50% chance of winning against an opponent with the same ELO
+will have about a 61% chance of winning against an opponent with an ELO score
+100 points lower.
+
+
+#### How big are these effects
+
+We then want to quantify how much these estimated effects change the 
+expected win probability.
+We have seen the size of the effects above for the non history parameters.
+The largest posterior mean for a $\beta\approx 1.56$. Since the normalized win
+proportion is between -0.6 and 0.6, that means that for a game
+where this player has a 50% chance of winning with a normalized average win
+proportion of 0, if their normalized win proportion is 0.5, the
+win probability will increase by $\approx 19\%$.
+This would occur, for example, if they win 50% of their total games but have
+won all 10 of their last 10. This is a similar size effect to the 
+increase in win probability which would come from playing an 
+opponent with an ELO ranking that is 170 points lower.
+
+Similarly, a normalized win history 0.25 
+above average corresponds to a difference 
+of approximately 80 in ELO scores.
+
+The underlying parameter $\mu_1$ has posterior mean of 0.606. 
+A normalised win history of 0.25 with a winner effect of this size
+would increase the win probability by about 4%, a similar effect
+as playing as white instead of black, all other covariates being
+equal.
+
+#### Winner Effects here
+
+Here, the presence of positive estimates for $\beta$ would indicate the
+presence of a __winner/loser__ effect, where a player is performing
+better (worse) than their overall performance is more (less)
+likely to win their subsequent games. As some of these distributions
+take both positive and negative values, we can compute the 
+posterior probability that $\beta>0$ for each of the focal players.
+
+```{r prob positive fit3 beta}
+#| echo: true
+prob_positive(fit3_ave$draws())
+```
+
+This indicates that most of these $\beta$ parameters are strongly seen 
+as positive.
+
+### Updated Model 
+
+An extension of this model was then to consider the "history" 
+as being composed of the previous game and a more general "winning streak",
+which is fit by the following model.
+
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + 
+\delta_j x_{ij}^{*} + 
+\gamma z_{ij}))},
+$$
+
+where now $x_{ij}^{*}$ is the result of the __previous__ game
+played by player $j$, and $x_{ij}$ is their normalised 
+win ratio over the previous $n$ games, not including the single
+previous game. Note that $x_{ij}^{*}$ is not normalised,
+so can take on values $0,0.5,1$.
+
+```{r load the stan fit}
+#| fig-width: 8
+#| fig-height: 6
+
+fit4 <- readRDS("../model_fits/model4.RDS")
+
+mcmc_hist(fit4$draws(c("delta", "mu3", "tau3"))) +
+  labs(title = "Effect of Previous Game")
+
+mcmc_hist(fit4$draws(c("beta", "mu1", "tau1"))) +
+  labs(title = "Effect of Previous n games, excluding most recent game")
+
+```
+
+
+The $\delta$ parameters then indicate the effect that the previous
+game alone has on the next game, while $\beta$ indicates the
+effect of the overall current streak (excluding the previous game).
+
+**Should the previous game be normalised to give deviation from average 
+performance?**
+
+### Model Checking Comparison
+
+We can use the posterior draws to do some model checking, generating
+synthetic data based on the posterior draws. These indicate that 
+our models are reasonable and able to describe this data well.
+Similarly we can do some model checking which indicates the model
+which separates out the history performs substantially better 
+than the other model.
+
+## Model from Powerpoint
+
+The slides shared give a similar form of model for this type
+of data to estimate winner/loser effects. 
+Written in the format shown here, that model would look like
+
+$$
+P(y_{Fi} = 1) =\frac{1}{1 + exp(-(\alpha_F + \alpha_{opp_i} + \beta_j\hat{w}_{Fi})
++ \beta_{opp_i}\hat{w}_{Oi} + \delta_j(w_{F,i-1} - \hat{w}_{Fi}) +
+\delta_{opp_i}(w_{O,i-1}-\hat{w}_{Oi})))}.
+$$
+
+Here we have:
+
+- $\hat{w}_{Fi}, \hat{w}_{Oi}$ is some measure of the long run performance
+focal player and their opponent
+- $w_{F,i-1} - \hat{w}_{Fi}$ measures the deviation between both players 
+previous result and their more long run performance.
+
+One difference with this model is that we now need to consider the 
+history of all opponents played by focal players also.
+For the chess example where many players are involved, this leads to thousands
+of opponents, many who plan only a small number of games.
+
+Covariates could also be included here, as described before.
+This model can be fit to the same initial dataset we considered above.
+
+
+```{r get same data as before for this example}
+#| eval: false
+
+get_hist_opp <- function(user, games, prev_n) {
+  hist_games <- games %>%
+    filter(White == user | Black == user) %>%
+    arrange(UTCDate, UTCTime) %>%
+    mutate(opp_white = ifelse(user == White, 1, 0)) %>%
+    select(White:BlackElo, opp_white, game_id) %>%
+    mutate(opp_result = case_when(
+      (opp_white == 1 & Result == "1-0") ~ 1,
+      (opp_white == 0 & Result == "0-1") ~ 1,
       (Result == "1/2-1/2") ~ 0.5,
       .default = 0
-      )) %>% 
-    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))
+      ))
+
+  ngames <- nrow(hist_games)
+
+  if(ngames < prev_n) {
+    hist_games <- hist_games %>%
+    mutate(opp_win_prop = opp_result/(1:ngames))
+  }
+  else{
+    hist_games <- hist_games %>%
+      mutate(opp_win_prop = c(cumsum(opp_result[1:(prev_n - 1)])/(1:(prev_n -1)),
+                              roll_mean(opp_result, n = prev_n)))
+  }
+  hist_games$player <- user
   hist_games
 }
-
 
 focal_players <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 18)
 ## if don't use all focal players here then removing data because they won't be
@@ -82,279 +298,92 @@ focal_players <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 18)
 
 top_players <- names(focal_players)
 
-
-## then get the opponents of these players
-
-full_opponents <- bullet_60 %>% 
+kept_games <- bullet_60 %>% 
   filter(Username %in% top_players) %>% 
-  select(White, Black) 
-
-all_opps <- c(full_opponents$White, full_opponents$Black)
-
-opponents <- unique(all_opps)
-
-
-## then need to get the history of these players, but maybe need
-## to store game id
-## can just match using date and time I guess?
-## need to modify the function then to account for this
-
-get_hist_opp <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(opp_white = ifelse(user == White, 1, 0)) %>% 
-    select(White:BlackElo, opp_white, game_id) %>% 
-    mutate(opp_result = case_when(
-      (opp_white == 1 & Result == "1-0") ~ 1,
-      (opp_white == 0 & Result == "0-1") ~ 1,
-      (Result == "1/2-1/2") ~ 0.5,
-      .default = 0
-      ))
-  
-  ngames <- nrow(hist_games)
-  
-  if(ngames < prev_n) {
-    hist_games <- hist_games %>% 
-    mutate(opp_win_prop = opp_result/(1:ngames))
-  }
-  else{
-    hist_games <- hist_games %>% 
-      mutate(opp_win_prop = c(cumsum(opp_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(opp_result, n = prev_n)))
-  }
-  hist_games$player <- user
-  hist_games
-}
-## so now the history is the history corresponding to the name
-## in the "player" column
-
-
-remaining_opponents <- opponents[!(opponents %in% top_players)]
-
-opp_hist <- map_dfr(remaining_opponents, get_hist_opp, bullet_60, prev_n = 5) %>% 
-  as_tibble()
-
-## so this gives the history of the opponents for each of their 
-## games, can use this to then first get their previous result, etc,
-## then join this with the other results
-
-prev_opp <- opp_hist %>% 
-  group_by(player) %>% 
-  arrange(UTCDate, UTCTime) %>% 
-  mutate(prev_opp_result = lag(opp_result, default = 0), 
-         prev_opp_prop = lag(opp_win_prop, default = 0)) %>%
-  select(game_id, player, prev_opp_result, prev_opp_prop)
-
-tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 5) %>% 
-  as_tibble()
-
-
-all <- tidy_games %>% 
-  left_join(prev_opp, by = "game_id") %>% 
-  mutate(focal = ifelse(focal_white == 1, White, Black))
-## this looks more reasonable now
-## this has the history of the opponent included, not the history 
-## of the focal player yet
-
-
-final_data <- all %>% 
-  group_by(focal) %>% 
-  arrange(UTCDate, UTCTime) %>% 
-  mutate(prev_focal_result = lag(focal_result, default = 0),
-         prev_focal_prop = lag(focal_win_prop, default = 0)) %>% 
-  ungroup()
-
-
-## then tidy this up for stan
-
-```
-
-
-This object `prev_game_both` should have the previous result of both players in
-each game, if that game is in the dataset.
-Similarly, `final_prev` has the games played by the focal players, along 
-with their previous result and their opponents previous result, if that
-game was in the original dataset used (all 60 second bullet games here).
-
-Then convert this into data for stan.
-
-
-```{r get stan data for simple model}
-
-final_data
-
-stan_prev <- final_data %>% 
-  mutate(WhiteElo = as.numeric(WhiteElo), 
-         BlackElo = as.numeric(BlackElo)) %>% 
-  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>%
-  mutate(elo_diff = ifelse(focal_white == 1, 
-                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% 
-  mutate(focal_id = match(focal_user, top_players)) %>% 
-  select(focal_user, focal_id, focal_white, 
-         prev_focal_result, prev_opp_result, focal_result) 
-
-
-stan_data <- list(N = nrow(stan_prev),
-                  J = length(top_players),
-                  y = stan_prev$focal_result,
-                  id = stan_prev$focal_id,
-                  focal_prev = stan_prev$prev_focal_result,
-                  opp_prev = stan_prev$prev_opp_result)
-
-```
-
-
-```{r fit the simple stan model}
-#| eval: false
-
-## remember no effect for non focal players in this at all 
-## at the moment
-
-stan_file <- "../Comp1.stan"
-
-mod <- cmdstan_model(stan_file)
-
-fit1_simple <- mod$sample(data = stan_data,
-                  seed = 123,
-                  chains = 4,
-                  parallel_chains = 4,
-                  refresh = 100)
-
-## this fits at least now...
-
-fit1_simple$summary()
-mcmc_hist(fit1_simple$draws(c("alpha", "beta")))
-
-```
-
-
-
-## Notes on these models
-
-- How does the choice of focal player make a difference in these models?
-
-```{r thinking about the choice of focal}
-
-table(bullet_60$Username)
-
-
-tidy_bullet <- bullet_60 %>% 
-  select(White:BlackElo, Username, game_id) %>% 
+  select(White:BlackElo, Username, game_id) %>%
   mutate(opponent = ifelse(Username == White, Black, White),
-         focal_white = ifelse(Username == White, 1, 0)) 
+         focal_white = ifelse(Username == White, 1, 0))
 
+curr_players <- unique(c(kept_games$White, kept_games$Black))
 
-all_players <- c(tidy_bullet$Username, tidy_bullet$opponent)
-players <- unique(all_players)
-
-## then just get all the history for this
-all_hist <- map_dfr(players, get_hist_opp, bullet_60, prev_n = 5) %>% 
-  as_tibble() %>% 
+all_hist <- map_dfr(curr_players, get_hist_opp, bullet_60, prev_n = 10) %>%
+  as_tibble() %>%
   select(game_id:player, UTCDate, UTCTime)
 
 min_hist <- all_hist %>% select(game_id:player)
 
-## this should have each game appear twice, for each of the two players
-## involved, so need to figure out how to handle that best
-## left join with tidy games matching player to focal and then
-## to opponent, rename the columns as needed
+tidy_stan <- kept_games %>%
+  left_join(min_hist, by = c("game_id", "Username" = "player")) %>%
+  arrange(UTCDate, UTCTime) %>%
+  rename(focal_result = opp_result, focal_win_prop = opp_win_prop) %>%
+  left_join(min_hist, by = c("game_id", "opponent" = "player")) %>%
+  as_tibble()
 
-
-tidy_stan <- tidy_bullet %>% 
-  left_join(min_hist, by = c("game_id", "Username" = "player")) %>% 
-  arrange(UTCDate, UTCTime) %>% 
-  rename(focal_result = opp_result, focal_win_prop = opp_win_prop) %>% 
-  left_join(min_hist, by = c("game_id", "opponent" = "player")) %>% 
-  as_tibble() 
-
-## this is all good, just need to lag both and add them in,
-## and also get the ids for the stan code
-
-
-## getting the overall current win probabilities for each player also, 
-## up to and including the current game
-
-player_avg <- all_hist %>% 
-  group_by(player) %>% 
+player_avg <- all_hist %>%
+  group_by(player) %>%
   arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
-  mutate(nrow = row_number()) %>% 
-  mutate(curr_avg = cumsum(opp_result)/nrow) %>% 
+  mutate(nrow = row_number()) %>%
+  mutate(curr_avg = cumsum(opp_result)/nrow) %>%
   select(game_id, player, curr_avg)
 
-global_avg <- all_hist %>% 
-  group_by(player) %>% 
+global_avg <- all_hist %>%
+  group_by(player) %>%
   summarise(total_avg = mean(opp_result))
 
-## then just join this in also to use it
-
-
 ```
 
 
 
-```{r getting the final data for potential stan model}
+```{r prep this for the stan model}
+#| eval: false
 
-
-final_data <- tidy_stan %>% 
-  left_join(player_avg, by = c("Username" = "player", "game_id")) %>% 
-  rename(focal_avg = curr_avg) %>% 
-  left_join(player_avg, by = c("opponent" = "player", "game_id")) %>% 
-  rename(opp_avg = curr_avg) %>% 
-  group_by(Username) %>% 
-  arrange(UTCDate, UTCTime) %>% 
+final_data <- tidy_stan %>%
+  left_join(player_avg, by = c("Username" = "player", "game_id")) %>%
+  rename(focal_avg = curr_avg) %>%
+  left_join(player_avg, by = c("opponent" = "player", "game_id")) %>%
+  rename(opp_avg = curr_avg) %>%
+  group_by(Username) %>%
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
   mutate(focal_prev_result = lag(focal_result, default = 0),
-         focal_runn_avg = lag(focal_avg, n = 2, default = 0)) %>% 
-  ungroup() %>% 
-  group_by(opponent) %>% 
-  arrange(UTCDate, UTCTime) %>% 
+         focal_runn_avg = lag(focal_win_prop, n = 2, default = 0)) %>%
+  ungroup() %>%
+  group_by(opponent) %>%
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
   mutate(opp_prev_result = lag(opp_result, default = 0),
-         opp_runn_avg = lag(opp_avg, n = 2, default = 0)) %>% 
-  ungroup() %>% 
-  mutate(focal_id = match(Username, players),
-         opp_id = match(opponent, players)) %>% 
-  filter(focal_result != 0.5) %>% 
-  select(-focal_avg, - opp_avg, - opp_result, 
-         - focal_win_prop, - opp_win_prop)
+         opp_runn_avg = lag(opp_win_prop, n = 2, default = 0)) %>%
+  ungroup() %>%
+  mutate(focal_id = match(Username, curr_players),
+         opp_id = match(opponent, curr_players)) %>%
+  filter(focal_result != 0.5) %>%
+  select(-focal_avg, - opp_avg, - opp_result,
+         - focal_win_prop, - opp_win_prop) %>% 
+  mutate(elo_diff = ifelse(focal_white == 1, as.numeric(WhiteElo) - 
+                             as.numeric(BlackElo), 
+                           as.numeric(BlackElo) - as.numeric(WhiteElo)))
 
 final_data
-## remove some unused columns
 
-norm_data <- final_data %>% 
-  left_join(global_avg, by = c("Username" = "player")) %>% 
-  rename(focal_global_avg = total_avg) %>% 
-  left_join(global_avg, by = c("opponent" = "player")) %>% 
-  rename(opp_global_avg = total_avg) %>% 
-  mutate(focal_prev_result = focal_prev_result - focal_global_avg,
-         focal_runn_avg = focal_runn_avg - focal_global_avg,
-         opp_prev_result = opp_prev_result - opp_global_avg,
-         opp_runn_avg = opp_runn_avg - opp_global_avg)
+## now running average is based on the previous 10 games, not all previous games
 
 ```
 
-Now this matches nicely, contains their historic winning average up to 2 games
-previously, along with their result in the previous game.
 
-Note that this has not been standardized currently.
+```{r process for stan and fit}
+#| eval: false
 
+stan_data_all <- list(N = nrow(final_data),
+                      J = length(curr_players),
+                      y = final_data$focal_result,
+                      focal_id = final_data$focal_id,
+                      opp_id = final_data$opp_id,
+                      focal_prev = final_data$focal_prev_result,
+                      opp_prev = final_data$opp_prev_result,
+                      focal_avg = final_data$focal_runn_avg,
+                      opp_avg = final_data$opp_runn_avg,
+                      elo_diff = final_data$elo_diff,
+                      colour = final_data$focal_white)
 
-```{r}
-
-norm_data
-
-
-stan_data_all <- list(N = nrow(norm_data),
-                      J = length(players),
-                      y = norm_data$focal_result,
-                      focal_id = norm_data$focal_id,
-                      opp_id = norm_data$opp_id,
-                      focal_prev = norm_data$focal_prev_result,
-                      opp_prev = norm_data$opp_prev_result,
-                      focal_avg = norm_data$focal_runn_avg,
-                      opp_avg = norm_data$opp_runn_avg)
-
-
-saveRDS(stan_data_all, file = "../cluster_scripts/stan_data.RDS")
+saveRDS(stan_data_all, file = "../cluster_scripts/stan_data_ppt_n10.RDS")
 
 stan_file <- "../Comp2.stan"
 
@@ -372,87 +401,454 @@ fit2 <- mod2$sample(data = stan_data_all,
 ```
 
 
-## Fitting this to all data
+```{r plot some parts of this model}
 
-Fit this model to all data on the cluster, just to see the results.
-The traceplots and R-hat for this model indicates it doesn't work well,
-does not converge.
+## estimated effects for the focal players
+## posterior predictive checks 
 
-```{r}
-stan_fit <- readRDS("../cluster_scripts/Cluster_stan.RDS")
-
-mcmc_hist(stan_fit$draws(c("alpha[1]", "alpha[2]")))
-
-r_hat <- rhat(stan_fit)
-
-summary(r_hat)
-
-which(r_hat > 1.15)
-## just problems with mu and tau for convergence here, otherwise good?
 
 ```
 
 
+Comparing the predictive performance of the model from 
+the slides (**without covariates**) it is unsurprisingly 
+not comparable to the current iteration of the model we have here.
 
 
-## Comparing models on smaller data
-
-Is there a small subset of players who play each other often that we can
-use in the dataset that can be used to compare these models?
+## Questions, Comments
 
 
-```{r}
+- The choice of the focal player for these types of models. Is there a
+way this should be done?
 
-bullet_60 %>% 
-  filter(White %in% focal_players) %>% 
-  filter(Black %in% focal_players)
+- I think that you probably do need to include the history of 
+both players in a match. Otherwise could identify a winner effect for the
+focal player which is actually a loser effect for the opponent. However,
+it may not be practical to have a separate effect for all players in a
+given dataset.
 
-## no games between any of the players used to scrape the data
-## would maybe need to get more players then, to use this for a comparison
-
-```
-
-
-```{r}
-library(chessR)
-
-
-chessdotcom_leaders <- chessdotcom_leaderboard(game_type = "live_bullet")
-
-top_bullet <- chessdotcom_leaders %>% top_n(10, wt = -rank) %>% 
-  select(player_id, username)
-
-
-# chessdotcom_hikaru_recent <- get_raw_chessdotcom(usernames = "Hikaru",
-#                                                  year_month = c(202201:202205))
-
-
-games_22 <- top_bullet$username %>% 
-  map_dfr(~get_raw_chessdotcom(.x, year_month = c(202201:202203)))
+- Need to think some more about what to normalize and how important
+that is for models of this form.
 
 
 
-top_games <- games_22 %>% 
-  filter(White %in% top_bullet$username) %>% 
-  filter(Black %in% top_bullet$username)
+
+-----
 
 
-## get 500 games here then for 1 month, probably enough to fit an initial model
-## most of these games bullet too, so could use that
+<!-- <!-- ## Model Comparison --> 
 
-top_games %>% 
-  group_by(White, Black, TimeClass) %>% 
-  tally() %>% 
-  arrange(-n)
+<!-- We want to compare these potential models, which is very similar -->
+<!-- to the model we fit previously. -->
+<!-- The only change is that we now need the history for -->
+<!-- both players, not just the focal player. -->
 
-
-bullet_games <- top_games %>% 
-  filter(TimeClass == "bullet")
+<!-- ```{r load in the initial data} -->
+<!-- #| cache: true -->
 
 
-bullet_top10 <- saveRDS(bullet_games, file = "chess_com_bullet_10.RDS")
+<!-- lichess_data <- readRDS("../../rdata/lichess_pilot.RData") -->
 
-```
+<!-- bullet_60 <- lichess_data %>% -->
+<!--   filter(Event == "Rated Bullet game") %>% -->
+<!--   filter(TimeControl == "60+0") %>% -->
+<!--   mutate(game_id = row_number()) -->
+
+<!-- get_hist <- function(user, games, prev_n) { -->
+<!--   hist_games <- games %>% -->
+<!--     filter(White == user | Black == user) %>% -->
+<!--     arrange(UTCDate, UTCTime) %>% -->
+<!--     mutate(focal_white = ifelse(Username == White, 1, 0)) %>% -->
+<!--     select(White:BlackElo, focal_white, game_id) %>% -->
+<!--     mutate(focal_result = case_when( -->
+<!--       (focal_white == 1 & Result == "1-0") ~ 1, -->
+<!--       (focal_white == 0 & Result == "0-1") ~ 1, -->
+<!--       (Result == "1/2-1/2") ~ 0.5, -->
+<!--       .default = 0 -->
+<!--       )) %>% -->
+<!--     mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), -->
+<!--                               roll_mean(focal_result, n = prev_n))) -->
+<!--   hist_games -->
+<!-- } -->
+
+
+<!-- focal_players <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 18) -->
+<!-- ## if don't use all focal players here then removing data because they won't be -->
+<!-- ## involved -->
+
+<!-- top_players <- names(focal_players) -->
+
+
+<!-- ## then get the opponents of these players -->
+
+<!-- full_opponents <- bullet_60 %>% -->
+<!--   filter(Username %in% top_players) %>% -->
+<!--   select(White, Black) -->
+
+<!-- all_opps <- c(full_opponents$White, full_opponents$Black) -->
+
+<!-- opponents <- unique(all_opps) -->
+
+
+<!-- ## then need to get the history of these players, but maybe need -->
+<!-- ## to store game id -->
+<!-- ## can just match using date and time I guess? -->
+<!-- ## need to modify the function then to account for this -->
+
+<!-- get_hist_opp <- function(user, games, prev_n) { -->
+<!--   hist_games <- games %>% -->
+<!--     filter(White == user | Black == user) %>% -->
+<!--     arrange(UTCDate, UTCTime) %>% -->
+<!--     mutate(opp_white = ifelse(user == White, 1, 0)) %>% -->
+<!--     select(White:BlackElo, opp_white, game_id) %>% -->
+<!--     mutate(opp_result = case_when( -->
+<!--       (opp_white == 1 & Result == "1-0") ~ 1, -->
+<!--       (opp_white == 0 & Result == "0-1") ~ 1, -->
+<!--       (Result == "1/2-1/2") ~ 0.5, -->
+<!--       .default = 0 -->
+<!--       )) -->
+
+<!--   ngames <- nrow(hist_games) -->
+
+<!--   if(ngames < prev_n) { -->
+<!--     hist_games <- hist_games %>% -->
+<!--     mutate(opp_win_prop = opp_result/(1:ngames)) -->
+<!--   } -->
+<!--   else{ -->
+<!--     hist_games <- hist_games %>% -->
+<!--       mutate(opp_win_prop = c(cumsum(opp_result[1:(prev_n - 1)])/(1:(prev_n -1)), -->
+<!--                               roll_mean(opp_result, n = prev_n))) -->
+<!--   } -->
+<!--   hist_games$player <- user -->
+<!--   hist_games -->
+<!-- } -->
+<!-- ## so now the history is the history corresponding to the name -->
+<!-- ## in the "player" column -->
+
+
+<!-- remaining_opponents <- opponents[!(opponents %in% top_players)] -->
+
+<!-- opp_hist <- map_dfr(remaining_opponents, get_hist_opp, bullet_60, prev_n = 5) %>% -->
+<!--   as_tibble() -->
+
+<!-- ## so this gives the history of the opponents for each of their -->
+<!-- ## games, can use this to then first get their previous result, etc, -->
+<!-- ## then join this with the other results -->
+
+<!-- prev_opp <- opp_hist %>% -->
+<!--   group_by(player) %>% -->
+<!--   arrange(UTCDate, UTCTime) %>% -->
+<!--   mutate(prev_opp_result = lag(opp_result, default = 0), -->
+<!--          prev_opp_prop = lag(opp_win_prop, default = 0)) %>% -->
+<!--   select(game_id, player, prev_opp_result, prev_opp_prop) -->
+
+<!-- tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 5) %>% -->
+<!--   as_tibble() -->
+
+
+<!-- all <- tidy_games %>% -->
+<!--   left_join(prev_opp, by = "game_id") %>% -->
+<!--   mutate(focal = ifelse(focal_white == 1, White, Black)) -->
+<!-- ## this looks more reasonable now -->
+<!-- ## this has the history of the opponent included, not the history -->
+<!-- ## of the focal player yet -->
+
+
+<!-- final_data <- all %>% -->
+<!--   group_by(focal) %>% -->
+<!--   arrange(UTCDate, UTCTime) %>% -->
+<!--   mutate(prev_focal_result = lag(focal_result, default = 0), -->
+<!--          prev_focal_prop = lag(focal_win_prop, default = 0)) %>% -->
+<!--   ungroup() -->
+
+
+<!-- ## then tidy this up for stan -->
+
+<!-- ``` -->
+
+
+<!-- This object `prev_game_both` should have the previous result of both players in -->
+<!-- each game, if that game is in the dataset. -->
+<!-- Similarly, `final_prev` has the games played by the focal players, along -->
+<!-- with their previous result and their opponents previous result, if that -->
+<!-- game was in the original dataset used (all 60 second bullet games here). -->
+
+<!-- Then convert this into data for stan. -->
+
+
+<!-- ```{r get stan data for simple model} -->
+
+<!-- final_data -->
+
+<!-- stan_prev <- final_data %>% -->
+<!--   mutate(WhiteElo = as.numeric(WhiteElo), -->
+<!--          BlackElo = as.numeric(BlackElo)) %>% -->
+<!--   mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>% -->
+<!--   mutate(elo_diff = ifelse(focal_white == 1, -->
+<!--                            WhiteElo - BlackElo, BlackElo - WhiteElo)) %>% -->
+<!--   mutate(focal_id = match(focal_user, top_players)) %>% -->
+<!--   select(focal_user, focal_id, focal_white, -->
+<!--          prev_focal_result, prev_opp_result, focal_result) -->
+
+
+<!-- stan_data <- list(N = nrow(stan_prev), -->
+<!--                   J = length(top_players), -->
+<!--                   y = stan_prev$focal_result, -->
+<!--                   id = stan_prev$focal_id, -->
+<!--                   focal_prev = stan_prev$prev_focal_result, -->
+<!--                   opp_prev = stan_prev$prev_opp_result) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r fit the simple stan model} -->
+<!-- #| eval: false -->
+
+<!-- ## remember no effect for non focal players in this at all -->
+<!-- ## at the moment -->
+
+<!-- stan_file <- "../Comp1.stan" -->
+
+<!-- mod <- cmdstan_model(stan_file) -->
+
+<!-- fit1_simple <- mod$sample(data = stan_data, -->
+<!--                   seed = 123, -->
+<!--                   chains = 4, -->
+<!--                   parallel_chains = 4, -->
+<!--                   refresh = 100) -->
+
+<!-- ## this fits at least now... -->
+
+<!-- fit1_simple$summary() -->
+<!-- mcmc_hist(fit1_simple$draws(c("alpha", "beta"))) -->
+
+<!-- ``` -->
+
+
+
+<!-- ## Notes on these models -->
+
+<!-- - How does the choice of focal player make a difference in these models? -->
+
+<!-- ```{r thinking about the choice of focal} -->
+
+<!-- table(bullet_60$Username) -->
+
+
+<!-- tidy_bullet <- bullet_60 %>% -->
+<!--   select(White:BlackElo, Username, game_id) %>% -->
+<!--   mutate(opponent = ifelse(Username == White, Black, White), -->
+<!--          focal_white = ifelse(Username == White, 1, 0)) -->
+
+
+<!-- all_players <- c(tidy_bullet$Username, tidy_bullet$opponent) -->
+<!-- players <- unique(all_players) -->
+
+<!-- ## then just get all the history for this -->
+<!-- all_hist <- map_dfr(players, get_hist_opp, bullet_60, prev_n = 5) %>% -->
+<!--   as_tibble() %>% -->
+<!--   select(game_id:player, UTCDate, UTCTime) -->
+
+<!-- min_hist <- all_hist %>% select(game_id:player) -->
+
+<!-- ## this should have each game appear twice, for each of the two players -->
+<!-- ## involved, so need to figure out how to handle that best -->
+<!-- ## left join with tidy games matching player to focal and then -->
+<!-- ## to opponent, rename the columns as needed -->
+
+
+<!-- tidy_stan <- tidy_bullet %>% -->
+<!--   left_join(min_hist, by = c("game_id", "Username" = "player")) %>% -->
+<!--   arrange(UTCDate, UTCTime) %>% -->
+<!--   rename(focal_result = opp_result, focal_win_prop = opp_win_prop) %>% -->
+<!--   left_join(min_hist, by = c("game_id", "opponent" = "player")) %>% -->
+<!--   as_tibble() -->
+
+<!-- ## this is all good, just need to lag both and add them in, -->
+<!-- ## and also get the ids for the stan code -->
+
+
+<!-- ## getting the overall current win probabilities for each player also, -->
+<!-- ## up to and including the current game -->
+
+<!-- player_avg <- all_hist %>% -->
+<!--   group_by(player) %>% -->
+<!--   arrange(UTCDate, UTCTime, .by_group = TRUE) %>% -->
+<!--   mutate(nrow = row_number()) %>% -->
+<!--   mutate(curr_avg = cumsum(opp_result)/nrow) %>% -->
+<!--   select(game_id, player, curr_avg) -->
+
+<!-- global_avg <- all_hist %>% -->
+<!--   group_by(player) %>% -->
+<!--   summarise(total_avg = mean(opp_result)) -->
+
+<!-- ## then just join this in also to use it -->
+
+
+<!-- ``` -->
+
+
+
+<!-- ```{r getting the final data for potential stan model} -->
+
+
+<!-- final_data <- tidy_stan %>% -->
+<!--   left_join(player_avg, by = c("Username" = "player", "game_id")) %>% -->
+<!--   rename(focal_avg = curr_avg) %>% -->
+<!--   left_join(player_avg, by = c("opponent" = "player", "game_id")) %>% -->
+<!--   rename(opp_avg = curr_avg) %>% -->
+<!--   group_by(Username) %>% -->
+<!--   arrange(UTCDate, UTCTime) %>% -->
+<!--   mutate(focal_prev_result = lag(focal_result, default = 0), -->
+<!--          focal_runn_avg = lag(focal_avg, n = 2, default = 0)) %>% -->
+<!--   ungroup() %>% -->
+<!--   group_by(opponent) %>% -->
+<!--   arrange(UTCDate, UTCTime) %>% -->
+<!--   mutate(opp_prev_result = lag(opp_result, default = 0), -->
+<!--          opp_runn_avg = lag(opp_avg, n = 2, default = 0)) %>% -->
+<!--   ungroup() %>% -->
+<!--   mutate(focal_id = match(Username, players), -->
+<!--          opp_id = match(opponent, players)) %>% -->
+<!--   filter(focal_result != 0.5) %>% -->
+<!--   select(-focal_avg, - opp_avg, - opp_result, -->
+<!--          - focal_win_prop, - opp_win_prop) -->
+
+<!-- final_data -->
+<!-- ## remove some unused columns -->
+
+<!-- norm_data <- final_data %>% -->
+<!--   left_join(global_avg, by = c("Username" = "player")) %>% -->
+<!--   rename(focal_global_avg = total_avg) %>% -->
+<!--   left_join(global_avg, by = c("opponent" = "player")) %>% -->
+<!--   rename(opp_global_avg = total_avg) %>% -->
+<!--   mutate(focal_prev_result = focal_prev_result - focal_global_avg, -->
+<!--          focal_runn_avg = focal_runn_avg - focal_global_avg, -->
+<!--          opp_prev_result = opp_prev_result - opp_global_avg, -->
+<!--          opp_runn_avg = opp_runn_avg - opp_global_avg) -->
+
+<!-- ``` -->
+
+<!-- Now this matches nicely, contains their historic winning average up to 2 games -->
+<!-- previously, along with their result in the previous game. -->
+
+<!-- Note that this has not been standardized currently. -->
+
+
+<!-- ```{r} -->
+
+<!-- norm_data -->
+
+
+<!-- stan_data_all <- list(N = nrow(norm_data), -->
+<!--                       J = length(players), -->
+<!--                       y = norm_data$focal_result, -->
+<!--                       focal_id = norm_data$focal_id, -->
+<!--                       opp_id = norm_data$opp_id, -->
+<!--                       focal_prev = norm_data$focal_prev_result, -->
+<!--                       opp_prev = norm_data$opp_prev_result, -->
+<!--                       focal_avg = norm_data$focal_runn_avg, -->
+<!--                       opp_avg = norm_data$opp_runn_avg) -->
+
+
+<!-- saveRDS(stan_data_all, file = "../cluster_scripts/stan_data.RDS") -->
+
+<!-- stan_file <- "../Comp2.stan" -->
+
+<!-- mod2 <- cmdstan_model(stan_file) -->
+
+<!-- fit2 <- mod2$sample(data = stan_data_all, -->
+<!--                     seed = 123, -->
+<!--                     chains = 4, -->
+<!--                     parallel_chains = 4, -->
+<!--                     refresh = 100, -->
+<!--                     iter_sampling = 500, -->
+<!--                     iter_warmup = 100) -->
+
+
+<!-- ``` -->
+
+
+<!-- ## Fitting this to all data -->
+
+<!-- Fit this model to all data on the cluster, just to see the results. -->
+<!-- The traceplots and R-hat for this model indicates it doesn't work well, -->
+<!-- does not converge. -->
+
+<!-- ```{r} -->
+<!-- stan_fit <- readRDS("../cluster_scripts/Cluster_stan.RDS") -->
+
+<!-- mcmc_hist(stan_fit$draws(c("alpha[1]", "alpha[2]"))) -->
+
+<!-- r_hat <- rhat(stan_fit) -->
+
+<!-- summary(r_hat) -->
+
+<!-- which(r_hat > 1.15) -->
+<!-- ## just problems with mu and tau for convergence here, otherwise good? -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ## Comparing models on smaller data -->
+
+<!-- Is there a small subset of players who play each other often that we can -->
+<!-- use in the dataset that can be used to compare these models? -->
+
+
+<!-- ```{r} -->
+
+<!-- bullet_60 %>% -->
+<!--   filter(White %in% focal_players) %>% -->
+<!--   filter(Black %in% focal_players) -->
+
+<!-- ## no games between any of the players used to scrape the data -->
+<!-- ## would maybe need to get more players then, to use this for a comparison -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(chessR) -->
+
+
+<!-- chessdotcom_leaders <- chessdotcom_leaderboard(game_type = "live_bullet") -->
+
+<!-- top_bullet <- chessdotcom_leaders %>% top_n(10, wt = -rank) %>% -->
+<!--   select(player_id, username) -->
+
+
+<!-- # chessdotcom_hikaru_recent <- get_raw_chessdotcom(usernames = "Hikaru", -->
+<!-- #                                                  year_month = c(202201:202205)) -->
+
+
+<!-- games_22 <- top_bullet$username %>% -->
+<!--   map_dfr(~get_raw_chessdotcom(.x, year_month = c(202201:202203))) -->
+
+
+
+<!-- top_games <- games_22 %>% -->
+<!--   filter(White %in% top_bullet$username) %>% -->
+<!--   filter(Black %in% top_bullet$username) -->
+
+
+<!-- ## get 500 games here then for 1 month, probably enough to fit an initial model -->
+<!-- ## most of these games bullet too, so could use that -->
+
+<!-- top_games %>% -->
+<!--   group_by(White, Black, TimeClass) %>% -->
+<!--   tally() %>% -->
+<!--   arrange(-n) -->
+
+
+<!-- bullet_games <- top_games %>% -->
+<!--   filter(TimeClass == "bullet") -->
+
+
+<!-- bullet_top10 <- saveRDS(bullet_games, file = "chess_com_bullet_10.RDS") -->
+
+<!-- ``` -->
 
 
 

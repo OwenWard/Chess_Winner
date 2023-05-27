@@ -21,19 +21,22 @@ stan_file <- here("owen","Comp2.stan")
 mod2 <- cmdstan_model(stan_file)
 
 fit2 <- mod2$sample(data = stan_data_all,
-                    seed = 123,
-                    chains = 4,
-                    parallel_chains = 4,
-                    refresh = 100,
-		                iter_warmup = 2000, 
-		                iter_sampling = 2000)
+                   seed = 123,
+                   chains = 4,
+                   parallel_chains = 4,
+                   refresh = 100,
+	                iter_warmup = 2000,
+	                iter_sampling = 2000)
 
 
 fit2$summary()
 
+
 fit2$save_object(file = here("owen", "cluster_scripts",
                              "Cluster_stan_ppt_2_n10.RDS"))
 
+
+# fit2 <- readRDS(here("owen", "cluster_scripts", "Cluster_stan_ppt_n10.RDS"))
 
 ## Do some model checking here using the draws to get 
 ## posterior predictive distributions
@@ -91,6 +94,6 @@ ggsave(filename = here("owen", "cluster_scripts", "ppd_model2.png"), plot = p1)
 
 fit4 <- readRDS(here("owen", "model_fits", "model4.RDS"))
 
-comp <- loo_compare(fit2, fit4)
+comp <- loo_compare(fit2$loo(), fit4$loo())
 
 print(comp)
