@@ -16,7 +16,7 @@ library(posterior)
 stan_data_all <- readRDS(here("owen", "cluster_scripts", "stan_data_ppt_n10.RDS"))
 
 
-stan_file <- here("owen","Comp2.stan")
+stan_file <- here("owen","Comp3.stan")
 
 mod2 <- cmdstan_model(stan_file)
 
