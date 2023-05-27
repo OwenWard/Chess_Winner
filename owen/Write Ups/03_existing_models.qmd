@@ -402,18 +402,31 @@ fit2 <- mod2$sample(data = stan_data_all,
 
 
 ```{r plot some parts of this model}
+#| fig-height: 8
 
 ## estimated effects for the focal players
 ## posterior predictive checks 
 
+fit_ppt <- readRDS(here("owen", "cluster_scripts", "Cluster_stan_ppt_2_n10.RDS"))
 
+focal <- paste0("beta[", c(1, 127, 1207, 1263, 1519, 1635, 
+                           1789, 2084, 2139, 2441, 2503, 2561, 
+                           2679, 2707, 2781, 2836, 3533, 3714), "]")
+
+mcmc_hist(fit_ppt$draws(focal))
+
+focal_gamma <- paste0("gamma[", c(1, 127, 1207, 1263, 1519, 1635, 
+                           1789, 2084, 2139, 2441, 2503, 2561, 
+                           2679, 2707, 2781, 2836, 3533, 3714), "]")
+
+
+mcmc_hist(fit_ppt$draws(focal_gamma))
 ```
 
+![Predictive Checks](../cluster_scripts/ppd_model2.png)
 
-Comparing the predictive performance of the model from 
-the slides (**without covariates**) it is unsurprisingly 
-not comparable to the current iteration of the model we have here.
-
+This model gives similar predictive performance to the previously proposed
+model.
 
 ## Questions, Comments
 
