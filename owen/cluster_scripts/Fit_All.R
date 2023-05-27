@@ -11,7 +11,7 @@ library(tidyverse)
 library(here)
 library(loo)
 library(ggplot2)
-
+library(posterior)
 
 stan_data_all <- readRDS(here("owen", "cluster_scripts", "stan_data_ppt_n10.RDS"))
 
@@ -31,7 +31,8 @@ fit2 <- mod2$sample(data = stan_data_all,
 
 fit2$summary()
 
-fit2$save_object(file = here("owen", "cluster_scripts", "Cluster_stan_ppt_n10.RDS"))
+fit2$save_object(file = here("owen", "cluster_scripts",
+                             "Cluster_stan_ppt_2_n10.RDS"))
 
 
 ## Do some model checking here using the draws to get 
@@ -84,7 +85,7 @@ p1 <- games_won %>%
              mapping = aes(xintercept = games_won), col = "red") +
   labs(title = "PPT Model, No Covariates")
 
-ggsave(filename = here("owen", "cluster_scripts", "ppd_model.png"), plot = p1)
+ggsave(filename = here("owen", "cluster_scripts", "ppd_model2.png"), plot = p1)
 
 ## then load in the competing model and compare them using loo
 
