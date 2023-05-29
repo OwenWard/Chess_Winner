@@ -64,6 +64,8 @@ model {
 }
 
 
+// generated quantities allows us to simulate from the fitted model
+// compute log likelihood for model comparison
 generated quantities {
   vector[N] log_lik;
   vector[N] y_rep;
