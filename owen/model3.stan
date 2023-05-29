@@ -29,9 +29,9 @@ parameters {
   real gamma1;
   real gamma2;
   real mu1;
-  real tau1;
+  real <lower=0> tau1;
   real mu2;
-  real tau2;
+  real <lower=0> tau2;
 }
 
 

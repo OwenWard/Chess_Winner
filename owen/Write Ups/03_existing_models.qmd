@@ -575,6 +575,14 @@ This model gives similar predictive performance to the previously proposed
 model. However, there are some minor concerns with model fitting 
 which should be addressed (convergence issues).
 
+```{r plot the draws}
+mcmc_pairs(fit_ppt$draws(c("mu1", "mu2", "mu3", "tau1", "tau2", "tau3")))
+mcmc_scatter(fit_ppt$draws(c("tau1", "tau2")))
+mcmc_scatter(fit_ppt$draws(c("lp__", "tau3")))
+```
+
+
+
 ## Questions, Comments
 
 

@@ -37,11 +37,11 @@ parameters {
   array[J] real beta;  // coefficient for previous win
   array[J] real gamma; // coefficient for deviation from overall avg
   real mu1;
-  real tau1;
+  real <lower=0> tau1;
   real mu2;
-  real tau2;
+  real <lower=0> tau2;
   real mu3;
-  real tau3;
+  real <lower=0> tau3;
   real delta1;
   real delta2;
 }
