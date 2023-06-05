@@ -33,9 +33,9 @@ data {
 
 // The parameters accepted by the model.
 parameters {
-  array[J] real alpha; // overall random effects
-  array[J] real beta;  // coefficient for previous win
-  array[J] real gamma; // coefficient for deviation from overall avg
+  // array[J] real alpha; // overall random effects
+  // array[J] real beta;  // coefficient for previous win
+  // array[J] real gamma; // coefficient for deviation from overall avg
   real mu1;
   real <lower=0> tau1;
   real mu2;
@@ -44,19 +44,33 @@ parameters {
   real <lower=0> tau3;
   real delta1;
   real delta2;
+  vector[J] alpha_raw;
+  vector[J] beta_raw;
+  vector[J] gamma_raw;
 }
 
+transformed parameters {
+  vector[J] alpha;
+  vector[J] beta;
+  vector[J] gamma;
+  alpha = mu1 + tau1 * alpha_raw;
+  beta = mu2 + tau2 * beta_raw;
+  gamma = mu3 + tau3 * gamma_raw;
+}
 
 model {
   mu1 ~ normal(0, 5);
   mu2 ~ normal(0, 5);
   mu3 ~ normal(0, 5);
-  tau1 ~ cauchy(0, 5);
-  tau2 ~ cauchy(0, 5);
-  tau3 ~ cauchy(0, 5);
-  alpha ~ normal(mu1, tau1);
-  beta ~ normal(mu2, tau2);
-  gamma ~ normal(mu3, tau3);
+  tau1 ~ cauchy(0, 0.5);
+  tau2 ~ cauchy(0, 0.5);
+  tau3 ~ cauchy(0, 0.5);
+  // alpha ~ normal(mu1, tau1);
+  // beta ~ normal(mu2, tau2);
+  // gamma ~ normal(mu3, tau3);
+  alpha_raw ~ std_normal();
+  beta_raw ~ std_normal();
+  gamma_raw ~ std_normal();
   delta1 ~ normal(0, 5);
   delta2 ~ normal(0, 5);
   vector[N] pred;
