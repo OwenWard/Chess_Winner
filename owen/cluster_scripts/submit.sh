@@ -1,8 +1,8 @@
 #! /bin/bash
 #
-#SBATCH --mem-per-cpu 16000
-#SBATCH -c 4
-#SBATCH -t 120:00
+#SBATCH --mem-per-cpu 8000
+#SBATCH -c 8
+#SBATCH -t 300:00
 #SBATCH --mail-user=oward@sfu.ca
 #SBATCH --mail-type=ALL
 
