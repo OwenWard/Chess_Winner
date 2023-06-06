@@ -2,3 +2,12 @@
 .Rhistory
 .RData
 .Ruserdata
+owen/Write Ups/01_eda_*
+owen/Write Ups/02_more_eda_*
+.DS_Store
+*.pdf
+*.html
+*.RDS
+*.png
+*.tex
+*.out
