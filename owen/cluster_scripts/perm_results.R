@@ -15,7 +15,7 @@ library(here)
 library(loo)
 library(ggplot2)
 library(posterior)
-
+library(RcppRoll)
 
 jobid <- Sys.getenv("SLURM_ARRAY_TASK_ID")
 jobid <- as.numeric(jobid)
