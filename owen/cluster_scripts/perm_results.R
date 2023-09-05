@@ -51,7 +51,23 @@ focal_games <- bullet_60 %>%
   filter(White %in% top_players | Black %in% top_players) %>% 
   mutate(Result = sample(Result))
 
-
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+    )) %>% 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
+                              roll_mean(focal_result, n = prev_n)))
+  
+  hist_games
+}
 
 tidy_games <- map_dfr(top_players, get_hist, focal_games, prev_n = 10) %>% 
   as_tibble()
