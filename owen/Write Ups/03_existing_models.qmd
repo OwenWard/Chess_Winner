@@ -892,3 +892,23 @@ games_won %>%
 
 ```
 
+
+### Robustness to Correlation
+
+A valid concern here is the large correlation between the data used at
+each step. For example, when using the previous 10 games as the history,
+subsequent games will use an average with 9 of the 10 terms in the average being
+identical. This leads to severe correlation.
+
+One potential way to deal with this (mentioned by the authors of the Deng et al 
+paper) is to test for this effect. One way to do this would be to consider
+a permutation test. The results can be randomly permuted, which allows the
+construction of an empirical set of estimates under the permutation.
+This would need to be considered for this data also.
+
+
+
+
+
+
+
