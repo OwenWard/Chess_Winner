@@ -97,11 +97,11 @@ stan_data_ave <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
-stan_file <- "owen/model3.stan"
+stan_file <- here("owen", "model3.stan")
 
 mod <- cmdstan_model(stan_file)
 
-fit3_ave <- mod$sample(data = stan_data_ave,
+fit3 <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
@@ -112,7 +112,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 ## to the simulation number
 
 
-par_ests <- fit3_ave$summary(c("alpha", "beta", "gamma1", "gamma2",
+par_ests <- fit3$summary(c("alpha", "beta", "gamma1", "gamma2",
                    "mu1", "mu2", "tau1", "tau2")) %>% 
   mutate(sim_id = sim_id)
 
