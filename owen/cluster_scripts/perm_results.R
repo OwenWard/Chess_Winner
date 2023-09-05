@@ -21,7 +21,7 @@ jobid <- Sys.getenv("SLURM_ARRAY_TASK_ID")
 jobid <- as.numeric(jobid)
 sim_id <- jobid
 
-lichess_data <- readRDS("rdata/lichess_pilot.RData")
+lichess_data <- readRDS(here("rdata", "lichess_pilot.RData"))
 
 lichess_data %>% 
   filter(Event == "Rated Bullet game") %>% 
