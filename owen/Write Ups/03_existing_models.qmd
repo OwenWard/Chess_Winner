@@ -816,7 +816,7 @@ init_data_mod <- tidy_games_mod %>%
 Then quickly fit model to this data.
 
 
-```{r}
+```{r, message=FALSE}
 stan_data_mod <- list(N = nrow(init_data_mod),
                   J = length(top_players),
                   y = init_data_mod$focal_result,
@@ -838,7 +838,7 @@ fit3_mod <- mod$sample(data = stan_data_mod,
 ```
 
 ```{r}
-fit3_mod$summary()
+# fit3_mod$summary()
 
 
 mcmc_hist(fit3_mod$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
@@ -904,11 +904,190 @@ One potential way to deal with this (mentioned by the authors of the Deng et al
 paper) is to test for this effect. One way to do this would be to consider
 a permutation test. The results can be randomly permuted, which allows the
 construction of an empirical set of estimates under the permutation.
-This would need to be considered for this data also.
+
+
+This can be implemented for the simple initial model, considering
+only games involving the 18 most frequent players. We randomly permute the 
+results from the corresponding matches and refit the above model 100 times.
+
+```{r}
+perm_path <- here("owen", "cluster_scripts", "perm_outputs", "perm_outputs")
+
+
+sims <- list.files(path = perm_path)
+
+perm_results <- sims %>% 
+  map_dfr(~readRDS(here("owen", "cluster_scripts",
+                        "perm_outputs", "perm_outputs",
+                        .x))) %>% 
+  select(variable, mean, median, sim_id)
+
+
+## global parameters here
+
+
+fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+
+orig <- fit3_ave$summary(c("alpha", "beta", "gamma1", "gamma2", "mu1", "mu2",
+                   "tau1", "tau2")) 
+
+rm(fit3_ave) 
+
+perm_results %>% 
+  filter(variable == "mu1") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of Mu_1",
+       subtitle = "True data appears different",
+       x = "mu1") +
+  geom_vline(data = orig %>% 
+               filter(variable == "mu1"),
+             aes(xintercept = mean), col = "red")
+
+perm_results %>% 
+  filter(variable == "mu2") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of Mu_2",
+       subtitle = "True data appears different",
+       x = "mu2") +
+  geom_vline(data = orig %>% 
+               filter(variable == "mu2"),
+             aes(xintercept = mean), col = "red")
+
+## try it also for some of the winner effects
+
+perm_results %>% 
+  filter(variable == "gamma1") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of gamma_1",
+       subtitle = "True data appears different",
+       x = "gamma_1") +
+  geom_vline(data = orig %>% 
+               filter(variable == "gamma1"),
+             aes(xintercept = mean), col = "red")
 
 
 
+perm_results %>% 
+  filter(variable == "gamma2") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of gamma_2",
+       subtitle = "True data appears different",
+       x = "gamma_2") +
+  geom_vline(data = orig %>% 
+               filter(variable == "gamma2"),
+             aes(xintercept = mean), col = "red")
 
+
+
+perm_results %>% 
+  filter(variable == "tau1") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of tau_1",
+       subtitle = "True data appears different",
+       x = "tau1") +
+  geom_vline(data = orig %>% 
+               filter(variable == "tau1"),
+             aes(xintercept = mean), col = "red")
+
+
+perm_results %>% 
+  filter(variable == "tau2") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of tau_2",
+       subtitle = "True data appears different",
+       x = "tau_2") +
+  geom_vline(data = orig %>% 
+             filter(variable == "tau2"),
+             aes(xintercept = mean), col = "red")
+
+
+```
+
+
+This quick permutations seem to indicate that the is evidence for these 
+effects, which is not present when the results are randomly permuted 
+instead.
+
+
+```{r repeat for all alpha}
+
+alpha_var <- paste0("alpha[", 1:18, "]")
+
+# alpha_var
+
+for(i in seq_along(alpha_var)){
+  plot_curr <- perm_results %>% 
+  filter(variable == alpha_var[i]) %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = paste0("Permutations of ", alpha_var[i]),
+       subtitle = "True data appears different",
+       x = alpha_var[i]) +
+  geom_vline(data = orig %>% 
+             filter(variable == alpha_var[i]),
+             aes(xintercept = mean), col = "red")
+  print(plot_curr)
+}
+
+```
+
+```{r repeat for all beta}
+
+beta_var <- paste0("beta[", 1:18, "]")
+
+# alpha_var
+
+for(i in seq_along(beta_var)){
+  plot_curr <- perm_results %>% 
+  filter(variable == beta_var[i]) %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = paste0("Permutations of ", beta_var[i]),
+       subtitle = "True data appears different",
+       x = alpha_var[i]) +
+  geom_vline(data = orig %>% 
+             filter(variable == beta_var[i]),
+             aes(xintercept = mean), col = "red")
+  print(plot_curr)
+}
+
+```
+
+Are the estimates that are not centered around 0 explained by the 
+overall proportion of wins in the dataset?
+
+```{r}
+
+init_data
+
+mean(init_data$focal_result)
+
+## not that different to 1/(1 + exp(-mu_2)), 
+## i.e just the proportion of games won by the focal player
+
+## is it something similar for gamma1, larger number of games as white
+## by the focal players?
+
+mean(init_data$focal_white)
+
+init_data %>% 
+  group_by(focal_white, focal_result) %>% 
+  tally() %>% 
+  mutate(prop = n /sum(n))
+
+init_data %>% 
+  group_by(focal_result) %>% 
+  tally() %>% 
+  mutate(prop = n /sum(n))
+
+
+```
 
 
 
