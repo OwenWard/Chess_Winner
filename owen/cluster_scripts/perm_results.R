@@ -51,6 +51,16 @@ focal_games <- bullet_60 %>%
   filter(White %in% top_players | Black %in% top_players) %>% 
   mutate(Result = sample(Result))
 
+## to permute within a player instead
+
+focal_games <- bullet_60 %>% 
+  filter(White %in% top_players | Black %in% top_players) %>% 
+  group_by(Username) %>% 
+  mutate(Result = sample(Result)) %>% 
+  ungroup()
+
+##
+
 get_hist <- function(user, games, prev_n) {
   hist_games <- games %>% 
     filter(White == user | Black == user) %>% 
@@ -86,6 +96,12 @@ init_data <- tidy_games %>%
   mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
+## to check the win proportions
+
+# init_data %>% 
+#   group_by(focal_white, focal_result) %>%
+#   tally() %>%
+#   mutate(prop = n/sum(n))
 
 
 stan_data_ave <- list(N = nrow(init_data),
@@ -117,5 +133,5 @@ par_ests <- fit3$summary(c("alpha", "beta", "gamma1", "gamma2",
   mutate(sim_id = sim_id)
 
 
-saveRDS(par_ests, file = here("owen", "cluster_scripts", "perm_outputs",
-                              paste0("perm_", sim_id, "_sep_5.RDS")))
+saveRDS(par_ests, file = here("owen", "cluster_scripts", "perm_outputs_indiv",
+                              paste0("perm_", sim_id, "_sep_22.RDS")))
