@@ -123,7 +123,7 @@ bullet_60 <- lichess_data %>%
 
 
 ```{r}
-#| eval: false
+#| eval: true
 
 get_hist <- function(user, games, prev_n) {
   hist_games <- games %>% 
@@ -403,7 +403,7 @@ previous result and their more long run performance.
 One difference with this model is that we now need to consider the 
 history of all opponents played by focal players also.
 For the chess example where many players are involved, this leads to thousands
-of opponents, many who plan only a small number of games.
+of opponents, many who play only a small number of games.
 
 Covariates could also be included here, as described before.
 This model can be fit to the same initial dataset we considered above.
@@ -760,6 +760,11 @@ avg_ELO %>%
 ## Updates July
 
 Only consider a single game in each window?
+This would be done by only using the final game in each subsequent
+window of size $n$, reducing the number of observations in 
+the data by a factor of $n$ essentially. Initially it was
+thought that this was being considered in the Deng et al. paper,
+but that was incorrect.
 
 
 ```{r}
@@ -795,7 +800,7 @@ tidy_games_mod <- map_dfr(top_players, get_hist_mod, bullet_60, prev_n = 10) %>%
 ## so this takes windows of size 10, so keep 10th game, 
 ## use history from the previous 9 games each time
 
-tidy_games_mod
+# tidy_games_mod
 
 
 init_data_mod <- tidy_games_mod %>% 
@@ -816,7 +821,7 @@ init_data_mod <- tidy_games_mod %>%
 Then quickly fit model to this data.
 
 
-```{r, message=FALSE}
+```{r, message=FALSE, }
 stan_data_mod <- list(N = nrow(init_data_mod),
                   J = length(top_players),
                   y = init_data_mod$focal_result,
@@ -833,8 +838,7 @@ mod <- cmdstan_model(stan_file)
 fit3_mod <- mod$sample(data = stan_data_mod,
                   seed = 123,
                   chains = 4,
-                  parallel_chains = 4,
-                  refresh = 100)
+                  parallel_chains = 4)
 ```
 
 ```{r}
@@ -1010,7 +1014,7 @@ perm_results %>%
 ```
 
 
-This quick permutations seem to indicate that the is evidence for these 
+This quick permutation seem to indicate that there is evidence for these 
 effects, which is not present when the results are randomly permuted 
 instead.
 
@@ -1050,7 +1054,7 @@ for(i in seq_along(beta_var)){
   geom_histogram() +
   labs(title = paste0("Permutations of ", beta_var[i]),
        subtitle = "True data appears different",
-       x = alpha_var[i]) +
+       x = beta_var[i]) +
   geom_vline(data = orig %>% 
              filter(variable == beta_var[i]),
              aes(xintercept = mean), col = "red")
@@ -1090,4 +1094,126 @@ init_data %>%
 ```
 
 
+#### Checking Permuting within Players only
+
+```{r read the data in}
+perm_path <- here("owen", "cluster_scripts",
+                  "perm_outputs", "perm_outputs_indiv")
+
+
+sims <- list.files(path = perm_path)
+
+perm_results <- sims %>% 
+  map_dfr(~readRDS(here("owen", "cluster_scripts",
+                        "perm_outputs", "perm_outputs_indiv",
+                        .x))) %>% 
+  select(variable, mean, median, sim_id)
+
+```
+
+```{r plot global pars}
+
+## have orig from above
+
+
+## mean winner effect
+
+perm_results %>% 
+  filter(variable == "mu1") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of Mu_1",
+       subtitle = "True data appears different",
+       x = "mu1") +
+  geom_vline(data = orig %>% 
+               filter(variable == "mu1"),
+             aes(xintercept = mean), col = "red")
+
+perm_results %>% 
+  filter(variable == "mu2") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of Mu_2",
+       subtitle = "This is the mean of the player effects",
+       x = "mu2") +
+  geom_vline(data = orig %>% 
+               filter(variable == "mu2"),
+             aes(xintercept = mean), col = "red")
+
+
+## effect of playing as white
+
+perm_results %>% 
+  filter(variable == "gamma1") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of gamma_1",
+       subtitle = "True data appears similar",
+       x = "gamma_1") +
+  geom_vline(data = orig %>% 
+               filter(variable == "gamma1"),
+             aes(xintercept = mean), col = "red")
+
+## effect of elo difference
+
+perm_results %>% 
+  filter(variable == "gamma2") %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = "Permutations of gamma_2",
+       subtitle = "True data appears different",
+       x = "gamma_2") +
+  geom_vline(data = orig %>% 
+               filter(variable == "gamma2"),
+             aes(xintercept = mean), col = "red")
+
+```
+
+
+```{r check alpha first}
+
+alpha_var <- paste0("alpha[", 1:18, "]")
+
+# alpha_var
+
+for(i in seq_along(alpha_var)){
+  plot_curr <- perm_results %>% 
+  filter(variable == alpha_var[i]) %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = paste0("Permutations of ", alpha_var[i]),
+       subtitle = "True data appears different",
+       x = alpha_var[i]) +
+  geom_vline(data = orig %>% 
+             filter(variable == alpha_var[i]),
+             aes(xintercept = mean), col = "red")
+  print(plot_curr)
+}
+
+## some of these still significant here, need to check it
+
+```
+
+```{r check beta also}
+
+
+beta_var <- paste0("beta[", 1:18, "]")
+
+# alpha_var
+
+for(i in seq_along(beta_var)){
+  plot_curr <- perm_results %>% 
+  filter(variable == beta_var[i]) %>% 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  labs(title = paste0("Permutations of ", beta_var[i]),
+       subtitle = "True data appears different",
+       x = beta_var[i]) +
+  geom_vline(data = orig %>% 
+             filter(variable == beta_var[i]),
+             aes(xintercept = mean), col = "red")
+  print(plot_curr)
+}
+
+```
 

@@ -98,7 +98,7 @@ init_data <- tidy_games %>%
 
 ## to check the win proportions
 
-# init_data %>% 
+# init_data %>%
 #   group_by(focal_white, focal_result) %>%
 #   tally() %>%
 #   mutate(prop = n/sum(n))
