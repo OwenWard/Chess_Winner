@@ -79,8 +79,8 @@ small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>% 
   # filter(TimeControl == "60+0") %>% 
   filter(Variant == "Standard") %>% 
-  filter(grepl("Rated", Event)) %>% 
-  filter(!grepl("Classical|Correspondence", Event))
+  filter(grepl("Rated Bullet game", Event)) #%>% 
+  # filter(!grepl("Classical|Correspondence", Event))
 
 users <- unique(small_data$Username)
 
@@ -128,6 +128,11 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        refresh = 100)
 
 
+## save the stan fit as not actually that large here
+
+fit3_ave$save_object(file = here(save_path, "all_rated_bullet.RDS"))
+
+
 ## create some summary plots of these results
 
 players <- users
@@ -138,14 +143,14 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws(c("mu2", "mu1", "tau2", "tau1", "gamma1", "gamma2")),
           facet_args = list(scales = "free"))
 
-ggsave(filename = paste0(save_path, "/global_pars.png"),
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet.png"),
                          width = 8, height = 8, units = "in")
 
 
 mcmc_hist(fit3_ave$draws("beta"),
           facet_args = list(labeller = player_labels)) 
 
-ggsave(filename = paste0(save_path, "/winner_pars.png"),
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet.png"),
        width = 8, height = 8, units = "in")
 
 names(players) <- paste0("alpha[", 1:length(users), "]")
@@ -153,6 +158,6 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws("alpha"),
           facet_args = list(labeller = player_labels))
 
-ggsave(filename = paste0(save_path, "/indiv_pars.png"),
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet.png"),
        width = 8, height = 8, units = "in")
 
