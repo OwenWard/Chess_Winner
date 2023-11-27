@@ -28,7 +28,7 @@ save_path <- here("results/lichess1700-1900/")
 
 
 files <- list.files(data_path)
-
+files <- files[1:10]
 
 ## need to write a function to process them separately then I think
 
@@ -102,7 +102,9 @@ init_data <- tidy_games %>%
   mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
   filter(focal_result != 0.5)
 
-
+cat("----------\n")
+print(dim(init_data))
+cat("----------\n")
 
 ### then fit the models
 
