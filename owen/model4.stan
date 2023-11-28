@@ -33,26 +33,26 @@ parameters {
   real gamma1;
   real gamma2;
   real mu1;
-  real <lower=0> tau1;
+  // real <lower=0> tau1;
   real mu2;
-  real <lower=0> tau2;
+  // real <lower=0> tau2;
   real mu3;
-  real <lower=0> tau3;
+  // real <lower=0> tau3;
 }
 
 
 model {
-  mu1 ~ normal(0, 5);
-  tau1 ~ cauchy(0, 5);
-  mu2 ~ normal(0, 5);
-  tau2 ~ cauchy(0, 5);
-  mu3 ~ normal(0, 5);
-  tau3 ~ normal(0, 5);
-  alpha ~ normal(mu2, tau2);
-  beta ~ normal(mu1, tau1);
-  delta ~ normal(mu3, tau3);
-  gamma1 ~ normal(0, 5);
-  gamma2 ~ normal(0, 5);
+  mu1 ~ normal(0, 1);
+  // tau1 ~ cauchy(0, 5);
+  mu2 ~ normal(0, 1);
+  // tau2 ~ cauchy(0, 5);
+  mu3 ~ normal(0, 1);
+  // tau3 ~ normal(0, 5);
+  alpha ~ normal(mu2, 1);
+  beta ~ normal(mu1, 1);
+  delta ~ normal(mu3, 1);
+  gamma1 ~ normal(0, 1);
+  gamma2 ~ normal(0, 1);
   vector[N] pred;
   for(i in 1:N){
     pred[i] = alpha[id[i]] + beta[id[i]] * win_prop[i] +
