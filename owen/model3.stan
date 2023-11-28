@@ -29,21 +29,21 @@ parameters {
   real gamma1;
   real gamma2;
   real mu1;
-  real <lower=0> tau1;
+  // real <lower=0> tau1;
   real mu2;
-  real <lower=0> tau2;
+  // real <lower=0> tau2;
 }
 
 
 model {
-  mu1 ~ normal(0, 5);
-  tau1 ~ cauchy(0, 5);
-  mu2 ~ normal(0, 5);
-  tau2 ~ cauchy(0, 5);
-  alpha ~ normal(mu2, tau2);
-  beta ~ normal(mu1, tau1);
-  gamma1 ~ normal(0, 5);
-  gamma2 ~ normal(0, 5);
+  mu1 ~ normal(0, 1);
+  // tau1 ~ cauchy(0, 5);
+  mu2 ~ normal(0, 1);
+  // tau2 ~ cauchy(0, 5);
+  alpha ~ normal(mu2, 1);
+  beta ~ normal(mu1, 1);
+  gamma1 ~ normal(0, 1);
+  gamma2 ~ normal(0, 1);
   vector[N] pred;
   for(i in 1:N){
     pred[i] = alpha[id[i]] + beta[id[i]] * win_prop[i] +
@@ -62,12 +62,12 @@ generated quantities {
   vector[N] log_lik;
   vector[N] y_rep;
   for (n in 1:N) {
-    log_lik[n] = bernoulli_logit_lpmf(y[n] | alpha[id[n]] + 
+    log_lik[n] = bernoulli_logit_lpmf(y[n] | alpha[id[n]] +
     beta[id[n]] * win_prop[n] +
     gamma1 * colour[n] + gamma2 * elo[n]);
-    
+
     // generate posterior predictive samples
-    y_rep[n] = bernoulli_logit_rng(alpha[id[n]] + 
+    y_rep[n] = bernoulli_logit_rng(alpha[id[n]] +
     beta[id[n]] * win_prop[n] +
     gamma1 * colour[n] + gamma2 * elo[n]);
   }
