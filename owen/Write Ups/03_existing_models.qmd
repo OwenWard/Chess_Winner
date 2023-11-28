@@ -192,18 +192,18 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                   parallel_chains = 4,
                   refresh = 100)
 
-fit3_ave$save_object("../model_fits/init_model_n10.RDS")
+# fit3_ave$save_object("../model_fits/init_model_n10.RDS")
 ```
 
 
 ```{r load in initial model here}
 
-fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
+# fit3_ave <- readRDS("../model_fits/init_model_n10.RDS")
 
 # fit3_ave$summary()
 
-mcmc_hist(fit3_ave$draws(c("alpha", "mu2", "tau2")))
-mcmc_hist(fit3_ave$draws(c("beta", "mu1", "tau1", "gamma1", "gamma2")))
+mcmc_hist(fit3_ave$draws(c("alpha", "mu2")))
+mcmc_hist(fit3_ave$draws(c("beta", "mu1", "gamma1", "gamma2")))
 ```
 
 #### Interpreting this output
@@ -222,7 +222,8 @@ $\frac{1}{1+\exp(-(\alpha_j + \gamma_1))}$,
 so $\gamma_1$ being positive indicates the win
 probability increases when playing white, which makes sense.
 Playing white makes a player who has 50% chance of winning as black
-have approximately a 54% chance of winning with white. Wikipedia says the increase 
+have approximately a 54% chance of winning with white. Wikipedia says
+the increase 
 in win probability from playing white has been estimated to be 
 4-6% so quite similar.
 
@@ -345,7 +346,7 @@ fit4 <- mod$sample(data = stan_data_hist,
 fit4$summary()
 
 
-fit4$save_object(file = "../model_fits/model4.RDS")
+# fit4$save_object(file = "../model_fits/model4.RDS")
 ```
 
 
@@ -354,12 +355,12 @@ fit4$save_object(file = "../model_fits/model4.RDS")
 #| fig-width: 8
 #| fig-height: 6
 
-fit4 <- readRDS("../model_fits/model4.RDS")
+# fit4 <- readRDS("../model_fits/model4.RDS")
 
-mcmc_hist(fit4$draws(c("delta", "mu3", "tau3"))) +
+mcmc_hist(fit4$draws(c("delta", "mu3"))) +
   labs(title = "Effect of Previous Game")
 
-mcmc_hist(fit4$draws(c("beta", "mu1", "tau1"))) +
+mcmc_hist(fit4$draws(c("beta", "mu1"))) +
   labs(title = "Effect of Previous n games, excluding most recent game")
 
 ```
