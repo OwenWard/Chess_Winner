@@ -28,7 +28,7 @@ save_path <- here("results/lichess1700-1900/")
 
 
 files <- list.files(data_path)
-files <- files[1:10]
+files <- files[1:15]
 
 ## need to write a function to process them separately then I think
 
