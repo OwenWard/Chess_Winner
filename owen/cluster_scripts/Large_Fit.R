@@ -28,7 +28,7 @@ save_path <- here("results/lichess1700-1900/")
 
 
 files <- list.files(data_path)
-files <- files[1:15]
+files <- files[1:25]
 
 ## need to write a function to process them separately then I think
 
@@ -130,7 +130,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save the stan fit as not actually that large here
 
-fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model2.RDS"))
+fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model3.RDS"))
 
 
 ## create some summary plots of these results
@@ -143,14 +143,14 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws(c("mu2", "mu1", "tau2", "tau1", "gamma1", "gamma2")),
           facet_args = list(scales = "free"))
 
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model2.png"),
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model3.png"),
                          width = 8, height = 8, units = "in")
 
 
 mcmc_hist(fit3_ave$draws("beta"),
           facet_args = list(labeller = player_labels)) 
 
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model2.png"),
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model3.png"),
        width = 8, height = 8, units = "in")
 
 names(players) <- paste0("alpha[", 1:length(users), "]")
@@ -158,6 +158,6 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws("alpha"),
           facet_args = list(labeller = player_labels))
 
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model2.png"),
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model3.png"),
        width = 8, height = 8, units = "in")
 
