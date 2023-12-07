@@ -29,17 +29,17 @@ parameters {
   real gamma1;
   real gamma2;
   real mu1;
-  real <lower=0> tau1;
+  // real <lower=0> tau1;
   real mu2;
-  real <lower=0> tau2;
+  // real <lower=0> tau2;
 }
 
 
 model {
   mu1 ~ normal(0, 1);
-  tau1 ~ normal(0, 1);
+  // tau1 ~ normal(0, 1);
   mu2 ~ normal(0, 1);
-  tau2 ~ normal(0, 1);
+  // tau2 ~ normal(0, 1);
   alpha ~ normal(mu2, 1);
   beta ~ normal(mu1, 1);
   gamma1 ~ normal(0, 1);
