@@ -131,7 +131,11 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save the stan fit as not actually that large here
 
+<<<<<<< HEAD
 fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model3.RDS"))
+=======
+fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model.RDS"))
+>>>>>>> 97c613e957a18ed5fb766eb911cf224295ebd5a7
 
 
 ## create some summary plots of these results
@@ -144,14 +148,14 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws(c("mu2", "mu1", "tau2", "tau1", "gamma1", "gamma2")),
           facet_args = list(scales = "free"))
 
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model3.png"),
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
                          width = 8, height = 8, units = "in")
 
 
 mcmc_hist(fit3_ave$draws("beta"),
           facet_args = list(labeller = player_labels)) 
 
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model3.png"),
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
        width = 8, height = 8, units = "in")
 
 names(players) <- paste0("alpha[", 1:length(users), "]")
@@ -159,6 +163,6 @@ player_labels <- as_labeller(players)
 mcmc_hist(fit3_ave$draws("alpha"),
           facet_args = list(labeller = player_labels))
 
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model3.png"),
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model.png"),
        width = 8, height = 8, units = "in")
 
