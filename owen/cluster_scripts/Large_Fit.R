@@ -22,14 +22,16 @@ theme_set(theme_bw())
 ### load in the data to use
 
 ## rerun for 2000-2200 next
-# data_path <- here("box_data/lichess1700-1900/")
-data_path <- here("box_data/lichess2000-2200/")
-# save_path <- here("results/lichess1700-1900/")
-save_path <- here("results/lichess2000-2200/")
+##data_path <- here("box_data/lichess1700-1900/")
+##data_path <- here("box_data/lichess2000-2200/")
+data_path <- here("box_data/lichess2300-2500/")
+##save_path <- here("results/lichess1700-1900/")
+##save_path <- here("results/lichess2000-2200/")
+save_path <- here("results/lichess2300-2500/")
 dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
-files <- files[1:25]
+files <- files[1:8]
 
 ## need to write a function to process them separately then I think
 
@@ -141,7 +143,7 @@ names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_ave$draws(c("mu2", "mu1", "tau2", "tau1", "gamma1", "gamma2")),
+mcmc_hist(fit3_ave$draws(c("mu2", "mu1",  "gamma1", "gamma2")),
           facet_args = list(scales = "free"))
 
 ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
