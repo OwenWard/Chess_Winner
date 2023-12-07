@@ -21,11 +21,12 @@ theme_set(theme_bw())
 
 ### load in the data to use
 
-
-data_path <- here("box_data/lichess1700-1900/")
-
-save_path <- here("results/lichess1700-1900/")
-
+## rerun for 2000-2200 next
+# data_path <- here("box_data/lichess1700-1900/")
+data_path <- here("box_data/lichess2000-2200/")
+# save_path <- here("results/lichess1700-1900/")
+save_path <- here("results/lichess2000-2200/")
+dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
 files <- files[1:15]
