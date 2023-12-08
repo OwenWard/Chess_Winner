@@ -1,0 +1,856 @@
+---
+title: "Model Checking"
+author: Owen G. Ward
+date: today
+format: 
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
+bibliography: refs.bib
+---
+
+
+The aim of this document is to summarise the current version 
+of the model and describe some of the ways we have assessed the
+suitability of this model to our data. The
+aim is for this document to be self contained.
+
+```{r setup}
+#| include: false
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.width = 8)
+
+library(tidyverse)
+library(RcppRoll)
+library(cmdstanr)
+library(posterior)
+library(bayesplot)
+library(loo)
+library(here)
+
+options(mc.cores = parallel::detectCores())
+
+theme_set(theme_bw())
+
+
+prob_positive <- function(stan_draws, param = "beta") {
+  all_draws <- as_draws_df(stan_draws)
+  ndraws <- nrow(all_draws)
+  as_tibble(all_draws) %>% 
+  select(starts_with(param)) %>% 
+  apply(2, function(x) sum(x>0)/ndraws)
+}
+
+```
+
+## The current model
+
+Based on @ding2021nhl, an initial model proposed was of the form
+
+$$
+P(y_{ij} = 1) = \frac{1}{1 + \exp(-(\alpha_j + \beta_j x_{ij} + \gamma z_{ij}))}
+$$
+
+where this is the probability of the **j-th focal player** 
+winning their **i-th game**. Here:
+
+- $\alpha_j$ is a player level random effect
+- $\beta_j$ is a player level random effect, accounting for the win ratio $x_{ij}$
+of the focal player over their previous $n$ games
+- $\gamma$ is a fixed effect of game level coefficients (colour, difference
+in ELO ranking)
+
+We then partially pool the $\alpha$ and $\beta$ coefficients, so
+
+$$
+\alpha_j \sim \mathcal{N}(\mu_2, 1)
+$$
+$$
+\mu_2 \sim \mathcal{N}(0, 1)
+$$
+$$
+\tau_2 \sim \mathcal{N}(0, 1)
+$$
+
+and similarly
+
+
+$$
+\beta_j \sim \mathcal{N}(\mu_1, 1)
+$$
+$$
+\mu_1 \sim \mathcal{N}(0, 1)
+$$
+$$
+\tau_1 \sim \mathcal{N}(0, 1)
+$$
+
+We rescale the win ratio $x_{ij}$, by the average win ratio of
+player $j$ across all 
+games they play in the dataset.
+This means $\beta_j$ captures how a players win
+probability changes as their historic performance deviates from 
+their overall average win ratio.
+
+For $z_{ij}$ we incorporate 2 covariates, namely the colour of 
+the focal player and the ELO difference between the focal 
+player and their opponent. So that means we have 
+$\gamma_1$, which tells us how the win probability changes in going
+from black to white,
+and $\gamma_2$ gives how the win probability changes as the focal player
+has a better ELO than their opponent.
+
+__These predictors are not currently rescaled__.
+
+
+## Fitting this to Lichess Data
+
+We fit this to some of the large lichess data. We consider only a subset 
+of the players in a given rating range, due to time constraints.
+
+
+### 1700-1900 Players
+
+We fit this to games from 25 players in the 1700-1900 range. 
+We looked only at standard rated bullet games (no tournaments, etc),
+which was 445k games, ranging from 500 - 50k games per player.
+Fitting this model take over 12 hours on a computing cluster.
+
+This results in the following estimated parameters.
+
+
+```{r}
+fit <- readRDS(here("results/", "lichess1700-1900/", 
+                    "all_rated_bullet_model3.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+```
+
+
+- Here the mean for $\mu_2$ is -0.0651, corresponding to a 48% chance of 
+winning as black against an equally ranked opponent. This parameter
+is not clearly different from 0 here. Posterior SD is large.
+
+- $\gamma_1$ is estimated to be about 0.115, indicating that playing 
+as white increases the win probability by 3%, holding other parameters 
+fixed. Posterior SD is very small.
+
+- $\gamma_2$ indicates that a 10 point ELO difference increases the win 
+probability by about 1%, while a 100 ELO score difference 
+increases the win probability by about 9%. Posterior SD is very small.
+
+- The global estimate for $\mu_1$, the global winner effect, is 
+around 0. Posterior SD is large here.
+
+
+
+```{r get names 1700-1900}
+#| cache: true
+
+
+## need to get user names here, from the data again
+
+data_path <- here("box_data/lichess1700-1900/")
+
+files <- list.files(data_path)
+files <- files[1:25]
+
+read_player <- function(path, file){
+  dat <- read_csv(file = paste0(data_path, file),
+                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
+                                   WhiteTitle = col_character(),
+                                   BlackTitle = col_character(),
+                                   WhiteElo = col_character(),
+                                   BlackElo = col_character(),
+                                   FEN = col_character())) %>% 
+    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
+    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
+           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
+  dat
+}
+
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+    )) %>% 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
+                              roll_mean(focal_result, n = prev_n)))
+  
+  hist_games
+}
+
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+
+
+## restrict to rated rapid and shorter here
+## this also removes the NAs, which makes sense
+
+small_data <- lichess_data %>% 
+  # filter(Event == "Rated Bullet game") %>% 
+  # filter(TimeControl == "60+0") %>% 
+  filter(Variant == "Standard") %>% 
+  filter(grepl("Rated Bullet game", Event)) #%>% 
+  # filter(!grepl("Classical|Correspondence", Event))
+
+users <- unique(small_data$Username)
+
+rm(lichess_data)
+rm(small_data)
+
+```
+
+
+```{r winner-effects-17-19}
+#| fig.height = 7
+
+players <- users
+names(players) <- paste0("beta[", 1:length(users), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit$draws("beta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+```
+
+
+
+Here we see that there is a range of plausible winner effects for 
+different players. 
+
+- Some have posterior distributions which are only positive, some 
+are only negative and some are centered around or near 0.
+
+
+-The largest posterior mean here is 1.32. This is saying that if on
+average you win 50% of your games, but have instead won 10 in a row, your
+probability of winning the next would increase by ~16% over that baseline.
+However most estimated effects are small, and most of these posterior
+distributions contain 0.
+
+
+```{r indiv-effects-17-19}
+#| fig.height = 6
+
+names(players) <- paste0("alpha[", 1:length(users), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+- Most of the individual player effects are somewhat negative but
+close to 0.
+
+- Many are quite similar to the global parameter here.
+
+
+### 2000-2200 Players
+
+We fit this model also to 10 players rated between 2000 and 2200. 
+With the same restrictions on the games this gives us 285k games.
+We have between 1200 and 89k games for each of these 10 players.
+
+
+```{r}
+
+fit2 <- readRDS(here("results/", "lichess2000-2200/", 
+                    "all_rated_bullet_model.RDS"))
+
+
+mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+```
+
+
+```{r get-player-names}
+#| cache: true
+
+data_path <- here("box_data/lichess2000-2200/")
+
+files <- list.files(data_path)
+files <- files[1:10]
+
+read_player <- function(path, file){
+  dat <- read_csv(file = paste0(data_path, file),
+                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
+                                   WhiteTitle = col_character(),
+                                   BlackTitle = col_character(),
+                                   WhiteElo = col_character(),
+                                   BlackElo = col_character(),
+                                   FEN = col_character())) %>% 
+    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
+    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
+           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
+  dat
+}
+
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+    )) %>% 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
+                              roll_mean(focal_result, n = prev_n)))
+  
+  hist_games
+}
+
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+
+
+## restrict to rated rapid and shorter here
+## this also removes the NAs, which makes sense
+
+small_data <- lichess_data %>% 
+  # filter(Event == "Rated Bullet game") %>% 
+  # filter(TimeControl == "60+0") %>% 
+  filter(Variant == "Standard") %>% 
+  filter(grepl("Rated Bullet game", Event)) #%>% 
+  # filter(!grepl("Classical|Correspondence", Event))
+
+users_20_22 <- unique(small_data$Username)
+
+rm(lichess_data)
+rm(small_data)
+
+```
+
+
+```{r}
+
+
+players <- users_20_22
+names(players) <- paste0("beta[", 1:length(users_20_22), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit2$draws("beta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+```
+
+```{r}
+names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit2$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+- Here the effect of a difference in ranking appears to be slightly larger.
+This leads to a bigger change in the win probability when the difference
+in ranking between the two players is larger.
+
+- The posterior standard deviations of the $\mu$ parameters is slightly
+larger in this model, but this could be explained by the smaller number of 
+games.
+
+- A smaller sample, but half of these posterior distributions 
+of the winner effects contain 0.
+
+### 2300-2500 Players 
+
+
+We look at 8 players rated between 2300 and 2500. This gives us 160k games,
+with players playing 4k-58k games. 
+
+```{r}
+fit3 <- readRDS(here("results/", "lichess2300-2500/", 
+                    "all_rated_bullet_model.RDS"))
+
+
+mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+```
+
+
+```{r get users 2300-2500}
+#| cache: true
+
+
+data_path <- here("box_data/lichess2300-2500/")
+
+files <- list.files(data_path)
+files <- files[1:8]
+
+
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+
+
+## restrict to rated rapid and shorter here
+## this also removes the NAs, which makes sense
+
+small_data <- lichess_data %>% 
+  # filter(Event == "Rated Bullet game") %>% 
+  # filter(TimeControl == "60+0") %>% 
+  filter(Variant == "Standard") %>% 
+  filter(grepl("Rated Bullet game", Event)) #%>% 
+  # filter(!grepl("Classical|Correspondence", Event))
+
+users_23_25 <- unique(small_data$Username)
+
+rm(lichess_data)
+rm(small_data)
+
+```
+
+
+
+```{r}
+
+players <- users_23_25
+names(players) <- paste0("beta[", 1:length(users_23_25), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit3$draws("beta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+```
+
+
+```{r}
+names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit3$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+
+## Other Questions
+
+Do focal players play each other in this data?
+
+```{r}
+data_path <- here("box_data/lichess1700-1900/")
+
+files <- list.files(data_path)
+files <- files[1:25]
+
+read_player <- function(path, file){
+  dat <- read_csv(file = paste0(data_path, file),
+                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
+                                   WhiteTitle = col_character(),
+                                   BlackTitle = col_character(),
+                                   WhiteElo = col_character(),
+                                   BlackElo = col_character(),
+                                   FEN = col_character())) %>% 
+    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
+    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
+           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
+  dat
+}
+
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+users <- unique(lichess_data$Username)
+
+
+overlap_data <- lichess_data %>% 
+  filter(White %in% users & Black %in% users) %>% 
+  filter(Variant == "Standard") %>% 
+  filter(grepl("Rated Bullet game", Event))
+
+rm(lichess_data)
+
+overlap_data %>% group_by(Username) %>% 
+  tally() %>% 
+  arrange(-n)
+```
+
+Certain players have a large amount of overlap, looking only at the games we
+consider in the analysis. How should these games be accounted for?
+
+
+```{r check for 2000-2200 games also}
+#| eval: false
+
+## happens here also, but not as often for this sample
+
+data_path <- here("box_data/lichess2000-2200/")
+
+files <- list.files(data_path)
+files <- files[1:10]
+
+read_player <- function(path, file){
+  dat <- read_csv(file = paste0(data_path, file),
+                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
+                                   WhiteTitle = col_character(),
+                                   BlackTitle = col_character(),
+                                   WhiteElo = col_character(),
+                                   BlackElo = col_character(),
+                                   FEN = col_character())) %>% 
+    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
+    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
+           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
+  dat
+}
+
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+users <- unique(lichess_data$Username)
+
+
+overlap_data <- lichess_data %>% 
+  filter(White %in% users & Black %in% users) %>% 
+  filter(Variant == "Standard") %>% 
+  filter(grepl("Rated Bullet game", Event))
+
+rm(lichess_data)
+
+overlap_data %>% group_by(Username) %>% 
+  tally() %>% 
+  arrange(-n)
+
+
+```
+
+
+### Other Comments
+
+- Model checking is hard for these large datasets
+
+- Not easy to do the permutation fits for all games
+
+- Hard to simulate fake data also
+
+- Are we ignoring any covariates which could influence the model here?
+
+- How do these effects change if we only look at games which were played 
+directly before?
+
+
+
+
+<!-- Below some ideas about posterior predictive checking, hard to currently  -->
+<!-- consider for the larger datasets we're working with. -->
+
+<!-- ## Posterior Predictive Checking -->
+
+
+<!-- ## Permuting the Original Data -->
+
+<!-- We can also use permutations of the data to examine how -->
+<!-- robust these results are. -->
+
+<!-- ### Global Permutation -->
+
+<!-- The simplest permutation of our model would be to simply permute -->
+<!-- all results at random and then process the data and refit this model. -->
+
+<!-- ```{r} -->
+<!-- perm_path <- here("owen", "cluster_scripts", "perm_outputs", "perm_outputs") -->
+
+
+<!-- sims <- list.files(path = perm_path) -->
+
+<!-- perm_results <- sims %>%  -->
+<!--   map_dfr(~readRDS(here("owen", "cluster_scripts", -->
+<!--                         "perm_outputs", "perm_outputs", -->
+<!--                         .x))) %>%  -->
+<!--   select(variable, mean, median, sim_id) -->
+
+
+<!-- ## global parameters here -->
+
+
+<!-- fit3_ave <- readRDS("../model_fits/init_model_n10.RDS") -->
+
+<!-- orig <- fit3_ave$summary(c("alpha", "beta", "gamma1", "gamma2", "mu1", "mu2", -->
+<!--                    "tau1", "tau2"))  -->
+
+<!-- rm(fit3_ave)  -->
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "mu1") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of Mu_1", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "mu1") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--                filter(variable == "mu1"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "mu2") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of Mu_2", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "mu2") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--                filter(variable == "mu2"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+<!-- ## try it also for some of the winner effects -->
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "gamma1") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of gamma_1", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "gamma_1") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--                filter(variable == "gamma1"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "gamma2") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of gamma_2", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "gamma_2") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--                filter(variable == "gamma2"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "tau1") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of tau_1", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "tau1") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--                filter(variable == "tau1"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+
+<!-- perm_results %>%  -->
+<!--   filter(variable == "tau2") %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Permutations of tau_2", -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = "tau_2") + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--              filter(variable == "tau2"), -->
+<!--              aes(xintercept = mean), col = "red") -->
+
+
+<!-- ``` -->
+
+
+<!-- This quick permutation seem to indicate that there is evidence for these  -->
+<!-- effects, which is not present when the results are randomly permuted  -->
+<!-- instead. -->
+
+
+<!-- Now we can look at the permutation distributions of $\alpha$. These are -->
+<!-- centered at $\mu_2$ with standard deviation $\tau_2$. -->
+<!-- As expected, all permutation distributions are essentially  -->
+<!-- draws from the the global mean player effect, which corresponds to some  -->
+<!-- overall number of games won. -->
+<!-- Most of the estimates fall in these permutation distributions, essentially -->
+<!-- indicating that the individual effect is the same as the global effect for these -->
+<!-- players.  -->
+<!-- For the players with a smaller effect, they are less likely to win -->
+<!-- then the overall average, while players with a larger effect are more likely to -->
+<!-- win. -->
+
+<!-- I suspect the jumpy nature of these permutation distributions would -->
+<!-- disappear if more permutations were considered. -->
+
+
+<!-- ```{r repeat for all alpha} -->
+
+<!-- alpha_var <- paste0("alpha[", 1:18, "]") -->
+
+<!-- # alpha_var -->
+
+<!-- for(i in seq_along(alpha_var)){ -->
+<!--   plot_curr <- perm_results %>%  -->
+<!--   filter(variable == alpha_var[i]) %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = paste0("Permutations of ", alpha_var[i]), -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = alpha_var[i]) + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--              filter(variable == alpha_var[i]), -->
+<!--              aes(xintercept = mean), col = "red") -->
+<!--   print(plot_curr) -->
+<!-- } -->
+
+<!-- ``` -->
+
+<!-- Given this global permutation of all game results, if we look at the  -->
+<!-- winner effect, we should expect to not see any evidence for these under -->
+<!-- the permutation distribution. The individual effects have mean $\mu_1$  -->
+<!-- and sd $\tau_1$. Note that these $\beta$ estimates under the  -->
+<!-- original data, which correspond to to winner and loser effects, appear -->
+<!-- to have stronger evidence under this permutation. Almost all of these are  -->
+<!-- positive and the one negative estimate is likely not significant, based -->
+<!-- on the posterior distribution anyway. -->
+
+
+
+<!-- ```{r repeat for all beta} -->
+
+<!-- beta_var <- paste0("beta[", 1:18, "]") -->
+
+<!-- # alpha_var -->
+
+<!-- for(i in seq_along(beta_var)){ -->
+<!--   plot_curr <- perm_results %>%  -->
+<!--   filter(variable == beta_var[i]) %>%  -->
+<!--   ggplot(aes(mean)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = paste0("Permutations of ", beta_var[i]), -->
+<!--        subtitle = "True data appears different", -->
+<!--        x = beta_var[i]) + -->
+<!--   geom_vline(data = orig %>%  -->
+<!--              filter(variable == beta_var[i]), -->
+<!--              aes(xintercept = mean), col = "red") -->
+<!--   print(plot_curr) -->
+<!-- } -->
+
+<!-- ``` -->
+
+<!-- Are the estimates that are not centered around 0 explained by the  -->
+<!-- overall proportion of wins in the dataset? When you permute all the results -->
+<!-- you essentially get that 48% of games are won by a focal player playing -->
+<!-- as black. This is basically $1/(1+\exp(-1(-0.1)))$. Note that the  -->
+<!-- proportion is higher in the original data. -->
+
+
+<!-- ```{r} -->
+<!-- #| eval: true -->
+<!-- #| echo: false -->
+
+
+<!-- lichess_data <- readRDS("../../rdata/lichess_pilot.RData") -->
+
+<!-- bullet_60 <- lichess_data %>%  -->
+<!--   filter(Event == "Rated Bullet game") %>%  -->
+<!--   filter(TimeControl == "60+0") %>%  -->
+<!--   mutate(game_id = row_number())  -->
+
+<!-- get_hist <- function(user, games, prev_n) { -->
+<!--   hist_games <- games %>%  -->
+<!--     filter(White == user | Black == user) %>%  -->
+<!--     arrange(UTCDate, UTCTime) %>%  -->
+<!--     mutate(focal_white = ifelse(Username == White, 1, 0)) %>%  -->
+<!--     select(White:BlackElo, focal_white) %>%  -->
+<!--     mutate(focal_result = case_when( -->
+<!--       (focal_white == 1 & Result == "1-0") ~ 1, -->
+<!--       (focal_white == 0 & Result == "0-1") ~ 1, -->
+<!--       (Result == "1/2-1/2") ~ 0.5, -->
+<!--       .default = 0 -->
+<!--       )) %>%  -->
+<!--     mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)),  -->
+<!--                               roll_mean(focal_result, n = prev_n))) -->
+
+<!--   hist_games -->
+<!-- } -->
+
+<!-- focal_players <- head(sort(table(c(bullet_60$Username)), decreasing = TRUE), 18) -->
+
+
+<!-- top_players <- names(focal_players) -->
+
+<!-- tidy_games <- map_dfr(top_players, get_hist, bullet_60, prev_n = 10) %>%  -->
+<!--   as_tibble() -->
+
+
+<!-- init_data <- tidy_games %>%  -->
+<!--   mutate(WhiteElo = as.numeric(WhiteElo),  -->
+<!--          BlackElo = as.numeric(BlackElo)) %>%  -->
+<!--   mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>%  -->
+<!--   mutate(elo_diff = ifelse(focal_white == 1,  -->
+<!--                            WhiteElo - BlackElo, BlackElo - WhiteElo)) %>%  -->
+<!--   mutate(focal_id = match(focal_user, top_players)) %>%  -->
+<!--   select(focal_user, focal_id, focal_white,  -->
+<!--          focal_win_prop, elo_diff, focal_result) %>%  -->
+<!--   group_by(focal_id) %>%  -->
+<!--   mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>%  -->
+<!--   filter(focal_result != 0.5) -->
+
+<!-- init_data %>% -->
+<!--   group_by(focal_white, focal_result) %>% -->
+<!--   tally() %>% -->
+<!--   mutate(prop = n /sum(n)) -->
+<!-- #  -->
+
+
+<!-- ``` -->
+
+<!-- ### Focal Player Permutation -->
+
+<!-- Alternatively, we could restrict our permutations to  -->
+<!-- instead be at the level of each focal player. This -->
+<!-- means that the total number of games won by each focal -->
+<!-- player will be the same, but any temporal -->
+<!-- structure to these results will be removed. -->
+
+
+
+
+<!-- ## Questions -->
+
+<!-- - Are we ignoring any covariates which could influence the model here? -->
+
+<!-- - How do these effects change if we only look at games which were played  -->
+<!-- directly before? -->
+
