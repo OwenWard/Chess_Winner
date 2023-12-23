@@ -17,21 +17,29 @@ options(mc.cores = parallel::detectCores())
 
 theme_set(theme_bw())
 
+path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
 
 ### load in the data to use
 
 ## rerun for 2000-2200 next
-##data_path <- here("box_data/lichess1700-1900/")
-##data_path <- here("box_data/lichess2000-2200/")
-data_path <- here("box_data/lichess2300-2500/")
-##save_path <- here("results/lichess1700-1900/")
-##save_path <- here("results/lichess2000-2200/")
-save_path <- here("results/lichess2300-2500/")
+all_data_path <- rep(NA, 3)
+all_save_path <- rep(NA, 3)
+all_data_path[1] <- here("box_data/lichess1700-1900/")
+all_data_path[2] <- here("box_data/lichess2000-2200/")
+all_data_path[3] <- here("box_data/lichess2300-2500/")
+all_save_path[1] <- here("results/lichess1700-1900/")
+all_save_path[2] <- here("results/lichess2000-2200/")
+all_save_path[3] <- here("results/lichess2300-2500/")
+
+
+data_path <- all_data_path[path_id]
+save_path <- all_save_path[path_id]
+
 dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
-files <- files[1:8]
+# files <- files[1:8]
 
 ## need to write a function to process them separately then I think
 
