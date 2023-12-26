@@ -102,6 +102,14 @@ small_data <- lichess_data %>%
 
 users <- unique(small_data$Username)
 
+## when players play less than 10 games
+## otherwise not needed
+users <- small_data %>% 
+  group_by(Username) %>% 
+  tally() %>% 
+  filter(n >= 10) %>% 
+  pull(Username)
+
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>% 
   as_tibble()
 
