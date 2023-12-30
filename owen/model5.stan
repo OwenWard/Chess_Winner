@@ -32,11 +32,11 @@ parameters {
   array[J] real delta; // the parameter for the single previous game
   real gamma1;
   real gamma2;
-  // real mu1;
+  real mu1;
   // real tau1;
   real mu2;
   // real tau2;
-  real mu3;
+  // real mu3;
   // real tau3;
 }
 
