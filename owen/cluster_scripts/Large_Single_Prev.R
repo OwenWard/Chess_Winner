@@ -158,7 +158,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 ## save the stan fit as not actually that large here
 
 fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model_prev.RDS"))
-# fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model.RDS"))
+# fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
 
 ## create some summary plots of these results
 
