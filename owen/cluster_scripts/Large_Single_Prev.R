@@ -172,7 +172,7 @@ mcmc_hist(fit3_ave$draws(c("mu2", "mu1",  "gamma1", "gamma2")),
 
 # ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model_prev.png"),
                          # width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model.png"),
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model_prev.png"),
        width = 8, height = 8, units = "in")
 
 mcmc_hist(fit3_ave$draws("beta"),
@@ -180,7 +180,7 @@ mcmc_hist(fit3_ave$draws("beta"),
 
 # ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model_prev.png"),
 #        width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model.png"),
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model_prev.png"),
        width = 8, height = 8, units = "in")
 
 names(players) <- paste0("alpha[", 1:length(users), "]")
@@ -190,5 +190,5 @@ mcmc_hist(fit3_ave$draws("alpha"),
 
 # ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model_prev.png"),
 #        width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model.png"),
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model_prev.png"),
        width = 8, height = 8, units = "in")
