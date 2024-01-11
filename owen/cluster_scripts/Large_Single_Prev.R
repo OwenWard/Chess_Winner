@@ -163,7 +163,7 @@ fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
 ## create some summary plots of these results
 
 players <- users
-names(players) <- paste0("beta[", 1:length(users), "]")
+names(players) <- paste0("delta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
@@ -175,7 +175,7 @@ mcmc_hist(fit3_ave$draws(c("mu2", "mu1",  "gamma1", "gamma2")),
 ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model_prev.png"),
        width = 8, height = 8, units = "in")
 
-mcmc_hist(fit3_ave$draws("beta"),
+mcmc_hist(fit3_ave$draws("delta"),
           facet_args = list(labeller = player_labels)) 
 
 # ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model_prev.png"),
