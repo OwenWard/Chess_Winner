@@ -16,6 +16,8 @@ of the model and describe some of the ways we have assessed the
 suitability of this model to our data. The
 aim is for this document to be self contained.
 
+This is being updated now to show all players in the Box Data.
+
 ```{r setup}
 #| include: false
 
@@ -111,19 +113,23 @@ We fit this to some of the large lichess data. We consider only a subset
 of the players in a given rating range, due to time constraints.
 
 
-### 1700-1900 Players
+### 1700-1900 Players, Bullet
 
-We fit this to games from 25 players in the 1700-1900 range. 
+We fit this to games from all players in the 1700-1900 range. 
 We looked only at standard rated bullet games (no tournaments, etc),
-which was 445k games, ranging from 500 - 50k games per player.
-Fitting this model take over 12 hours on a computing cluster.
+which 675k games, ranging from 500 - 128k games per player.
+Fitting this model takes many hours on a computing cluster.
 
 This results in the following estimated parameters.
 
 
 ```{r}
-fit <- readRDS(here("results/", "lichess1700-1900/", 
-                    "all_rated_bullet_model3.RDS"))
+fit <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+                    "all_rated_bullet_model.RDS"))
+
+users <- readRDS(here("results/", "Full_Fits",
+                      "lichess1700-1900/",
+                      "users_bullet.RDS"))
 
 
 mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
@@ -131,15 +137,19 @@ mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
        subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
+
+fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
 ```
 
 
-- Here the mean for $\mu_2$ is -0.0651, corresponding to a 48% chance of 
+- Here the mean for $\mu_2$ is -0.0483, corresponding to a 48% chance of 
 winning as black against an equally ranked opponent. This parameter
 is not clearly different from 0 here. Posterior SD is large.
 
-- $\gamma_1$ is estimated to be about 0.115, indicating that playing 
-as white increases the win probability by 3%, holding other parameters 
+- $\gamma_1$ is estimated to be about 0.094, indicating that playing 
+as white increases the win probability by 2.5%, holding other parameters 
 fixed. Posterior SD is very small.
 
 - $\gamma_2$ indicates that a 10 point ELO difference increases the win 
@@ -151,77 +161,8 @@ around 0. Posterior SD is large here.
 
 
 
-```{r get names 1700-1900}
-#| cache: true
-
-
-## need to get user names here, from the data again
-
-data_path <- here("box_data/lichess1700-1900/")
-
-files <- list.files(data_path)
-files <- files[1:25]
-
-read_player <- function(path, file){
-  dat <- read_csv(file = paste0(data_path, file),
-                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
-                                   WhiteTitle = col_character(),
-                                   BlackTitle = col_character(),
-                                   WhiteElo = col_character(),
-                                   BlackElo = col_character(),
-                                   FEN = col_character())) %>% 
-    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
-           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
-    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
-           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
-  dat
-}
-
-get_hist <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
-    select(White:BlackElo, focal_white) %>% 
-    mutate(focal_result = case_when(
-      (focal_white == 1 & Result == "1-0") ~ 1,
-      (focal_white == 0 & Result == "0-1") ~ 1,
-      (Result == "1/2-1/2") ~ 0.5,
-      .default = 0
-    )) %>% 
-    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))
-  
-  hist_games
-}
-
-
-lichess_data <- files %>% 
-  map_dfr(~read_player(data_path, .x))
-
-
-
-
-## restrict to rated rapid and shorter here
-## this also removes the NAs, which makes sense
-
-small_data <- lichess_data %>% 
-  # filter(Event == "Rated Bullet game") %>% 
-  # filter(TimeControl == "60+0") %>% 
-  filter(Variant == "Standard") %>% 
-  filter(grepl("Rated Bullet game", Event)) #%>% 
-  # filter(!grepl("Classical|Correspondence", Event))
-
-users <- unique(small_data$Username)
-
-rm(lichess_data)
-rm(small_data)
-
-```
-
-
 ```{r winner-effects-17-19}
-#| fig.height = 7
+#| fig.height = 9
 
 players <- users
 names(players) <- paste0("beta[", 1:length(users), "]")
@@ -270,6 +211,9 @@ close to 0.
 We fit this model also to 10 players rated between 2000 and 2200. 
 With the same restrictions on the games this gives us 285k games.
 We have between 1200 and 89k games for each of these 10 players.
+
+
+<!-- Down to here in terms of updating this -->
 
 
 ```{r}

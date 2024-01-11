@@ -29,6 +29,10 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_save_path[1] <- here("results/lichess1700-1900/")
+
+# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
+# ## if need to run it locally
+
 all_save_path[2] <- here("results/lichess2000-2200/")
 all_save_path[3] <- here("results/lichess2300-2500/")
 
@@ -86,19 +90,22 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
+# small_data <- lichess_data %>%
+#   # filter(Event == "Rated Bullet game") %>%
+#   # filter(TimeControl == "60+0") %>%
+#   filter(Variant == "Standard") %>%
+#   filter(grepl("Rated Bullet game", Event)) 
+
 small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>%
   # filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
-  filter(grepl("Rated Bullet game", Event)) 
-
-# small_data <- lichess_data %>% 
-#   # filter(Event == "Rated Bullet game") %>% 
-#   # filter(TimeControl == "60+0") %>% 
-#   filter(Variant == "Standard") %>% 
-#   filter(grepl("Rated Blitz game", Event)) 
+  filter(grepl("Rated Blitz game", Event))
 
 users <- unique(small_data$Username)
+
+# saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
+saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
 ## when players play less than 10 games
 ## otherwise not needed
