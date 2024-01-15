@@ -30,7 +30,7 @@ all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_save_path[1] <- here("results/lichess1700-1900/")
 
-all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
+# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
 # ## if need to run it locally
 
 all_save_path[2] <- here("results/lichess2000-2200/")
