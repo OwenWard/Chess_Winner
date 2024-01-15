@@ -45,6 +45,39 @@ prob_positive <- function(stan_draws, param = "beta") {
   apply(2, function(x) sum(x>0)/ndraws)
 }
 
+read_player <- function(path, file){
+  dat <- read_csv(file = paste0(data_path, file),
+                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
+                                   WhiteTitle = col_character(),
+                                   BlackTitle = col_character(),
+                                   WhiteElo = col_character(),
+                                   BlackElo = col_character(),
+                                   FEN = col_character())) %>% 
+    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
+    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
+           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
+  dat
+}
+
+get_hist <- function(user, games, prev_n) {
+  hist_games <- games %>% 
+    filter(White == user | Black == user) %>% 
+    arrange(UTCDate, UTCTime) %>% 
+    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
+    select(White:BlackElo, focal_white) %>% 
+    mutate(focal_result = case_when(
+      (focal_white == 1 & Result == "1-0") ~ 1,
+      (focal_white == 0 & Result == "0-1") ~ 1,
+      (Result == "1/2-1/2") ~ 0.5,
+      .default = 0
+    )) %>% 
+    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
+                              roll_mean(focal_result, n = prev_n)))
+  
+  hist_games
+}
+
 ```
 
 ## The current model
@@ -208,17 +241,18 @@ close to 0.
 
 ### 2000-2200 Players
 
-We fit this model also to 10 players rated between 2000 and 2200. 
-With the same restrictions on the games this gives us 285k games.
-We have between 1200 and 89k games for each of these 10 players.
+TO BE COMPLETED
 
 
-<!-- Down to here in terms of updating this -->
+We fit this model also to all players rated between 2000 and 2200. 
+With the same restrictions on the games this gives us 834k games.
+We have between 1200 and 89k games for each of these players.
 
 
 ```{r}
+#| eval: false
 
-fit2 <- readRDS(here("results/", "lichess2000-2200/", 
+fit2 <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
                     "all_rated_bullet_model.RDS"))
 
 
@@ -227,77 +261,16 @@ mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
        subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
-```
-
-
-```{r get-player-names}
-#| cache: true
-
-data_path <- here("box_data/lichess2000-2200/")
-
-files <- list.files(data_path)
-files <- files[1:10]
-
-read_player <- function(path, file){
-  dat <- read_csv(file = paste0(data_path, file),
-                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
-                                   WhiteTitle = col_character(),
-                                   BlackTitle = col_character(),
-                                   WhiteElo = col_character(),
-                                   BlackElo = col_character(),
-                                   FEN = col_character())) %>% 
-    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
-           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
-    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
-           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
-  dat
-}
-
-get_hist <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
-    select(White:BlackElo, focal_white) %>% 
-    mutate(focal_result = case_when(
-      (focal_white == 1 & Result == "1-0") ~ 1,
-      (focal_white == 0 & Result == "0-1") ~ 1,
-      (Result == "1/2-1/2") ~ 0.5,
-      .default = 0
-    )) %>% 
-    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))
-  
-  hist_games
-}
-
-
-lichess_data <- files %>% 
-  map_dfr(~read_player(data_path, .x))
-
-
-
-
-## restrict to rated rapid and shorter here
-## this also removes the NAs, which makes sense
-
-small_data <- lichess_data %>% 
-  # filter(Event == "Rated Bullet game") %>% 
-  # filter(TimeControl == "60+0") %>% 
-  filter(Variant == "Standard") %>% 
-  filter(grepl("Rated Bullet game", Event)) #%>% 
-  # filter(!grepl("Classical|Correspondence", Event))
-
-users_20_22 <- unique(small_data$Username)
-
-rm(lichess_data)
-rm(small_data)
+users_20_22 <- readRDS(here("results/", "Full_Fits",
+                      "lichess2000-2200/",
+                      "users_bullet.RDS"))
 
 ```
+
 
 
 ```{r}
-
+#| eval: false
 
 players <- users_20_22
 names(players) <- paste0("beta[", 1:length(users_20_22), "]")
@@ -311,6 +284,8 @@ mcmc_hist(fit2$draws("beta"),
 ```
 
 ```{r}
+#| eval: false
+
 names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
 player_labels <- as_labeller(players)
 mcmc_hist(fit2$draws("alpha"),
@@ -318,69 +293,37 @@ mcmc_hist(fit2$draws("alpha"),
   labs(title = "Individual Player Effects")
 ```
 
-- Here the effect of a difference in ranking appears to be slightly larger.
-This leads to a bigger change in the win probability when the difference
-in ranking between the two players is larger.
+<!-- - Here the effect of a difference in ranking appears to be slightly larger. -->
+<!-- This leads to a bigger change in the win probability when the difference -->
+<!-- in ranking between the two players is larger. -->
 
-- The posterior standard deviations of the $\mu$ parameters is slightly
-larger in this model, but this could be explained by the smaller number of 
-games.
+<!-- - The posterior standard deviations of the $\mu$ parameters is slightly -->
+<!-- larger in this model, but this could be explained by the smaller number of  -->
+<!-- games. -->
 
-- A smaller sample, but half of these posterior distributions 
-of the winner effects contain 0.
+<!-- - A smaller sample, but half of these posterior distributions  -->
+<!-- of the winner effects contain 0. -->
 
 ### 2300-2500 Players 
 
 
-We look at 8 players rated between 2300 and 2500. This gives us 160k games,
-with players playing 4k-58k games. 
+We look at all players rated between 2300 and 2500. This gives us 703k games,
+with players playing 400-74k games. 
 
 ```{r}
-fit3 <- readRDS(here("results/", "lichess2300-2500/", 
+fit3 <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
                     "all_rated_bullet_model.RDS"))
 
 
-mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+users_23_25 <- readRDS(here("results/", "Full_Fits",
+                      "lichess2300-2500/",
+                      "users_bullet.RDS"))
+
+mcmc_hist(fit3$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
   labs(title = "Global Parameters",
        subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 ```
-
-
-```{r get users 2300-2500}
-#| cache: true
-
-
-data_path <- here("box_data/lichess2300-2500/")
-
-files <- list.files(data_path)
-files <- files[1:8]
-
-
-
-lichess_data <- files %>% 
-  map_dfr(~read_player(data_path, .x))
-
-
-
-
-## restrict to rated rapid and shorter here
-## this also removes the NAs, which makes sense
-
-small_data <- lichess_data %>% 
-  # filter(Event == "Rated Bullet game") %>% 
-  # filter(TimeControl == "60+0") %>% 
-  filter(Variant == "Standard") %>% 
-  filter(grepl("Rated Bullet game", Event)) #%>% 
-  # filter(!grepl("Classical|Correspondence", Event))
-
-users_23_25 <- unique(small_data$Username)
-
-rm(lichess_data)
-rm(small_data)
-
-```
-
 
 
 ```{r}
@@ -407,7 +350,437 @@ mcmc_hist(fit3$draws("alpha"),
 ```
 
 
-## Other Questions
+## Repeating for Blitz Games
+
+### 1700-1900
+
+```{r}
+
+fit <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+                    "all_rated_blitz_model.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users
+names(players) <- paste0("beta[", 1:length(users), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit$draws("beta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+### 2000-2200
+
+TO BE COMPLETED
+
+```{r}
+#| eval: false
+
+
+
+fit2 <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+                    "all_rated_blitz_model.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users
+names(players) <- paste0("delta[", 1:length(users), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit2$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit2$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+
+```
+
+
+### 2300-2500
+
+TO BE COMPLETED
+
+```{r}
+#| eval: false
+
+fit3 <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+                    "all_rated_blitz_model.RDS"))
+
+
+```
+
+
+## Alternative Model
+
+The alternative model is to use only the previous game as history, 
+ignoring all other games. This is perhaps more susceptible to 
+issues with correlation, which we will need to discuss further.
+
+### 1700-1900 Bullet
+
+```{r}
+
+fit <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+                    "all_rated_bullet_model_prev.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users
+names(players) <- paste0("delta[", 1:length(users), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+### 2000-2200 Bullet
+
+```{r}
+fit2 <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+                    "all_rated_bullet_model_prev.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit2$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users_20_22
+names(players) <- paste0("delta[", 1:length(users_20_22), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit2$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit2$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+### 2300-2500 Bullet
+
+```{r}
+fit3 <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+                    "all_rated_bullet_model_prev.RDS"))
+
+
+mcmc_hist(fit3$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit3$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users_23_25
+names(players) <- paste0("delta[", 1:length(users_23_25), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit3$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit3$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+### 1700-1900 Blitz
+
+```{r}
+fit <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+                    "all_rated_blitz_model_prev.RDS"))
+
+
+mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users
+names(players) <- paste0("delta[", 1:length(users), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+
+### 2000-2200 Blitz
+
+```{r}
+fit2 <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+                    "all_rated_blitz_model_prev.RDS"))
+
+
+mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit2$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users_20_22
+names(players) <- paste0("delta[", 1:length(users_20_22), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit2$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit2$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+
+### 2300-2500 Blitz
+
+```{r}
+fit3 <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+                    "all_rated_blitz_model_prev.RDS"))
+
+
+mcmc_hist(fit3$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+  labs(title = "Global Parameters",
+       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference")
+
+
+fit3$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+
+
+## winner effects
+players <- users_23_25
+names(players) <- paste0("delta[", 1:length(users_23_25), "]")
+
+player_labels <- as_labeller(players)
+
+mcmc_hist(fit3$draws("delta"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Player Winner Effects")
+
+
+## indiv effects
+names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
+player_labels <- as_labeller(players)
+mcmc_hist(fit3$draws("alpha"),
+          facet_args = list(labeller = player_labels)) +
+  labs(title = "Individual Player Effects")
+```
+
+
+## Other Questions of Interest
+
+- How much do player ratings change across their games?
+
+We can look at this for a sample of players, from the 2300-2500 category.
+
+```{r}
+## load in the data for this
+
+path_id <- 3
+
+all_data_path <- rep(NA, 3)
+all_save_path <- rep(NA, 3)
+all_data_path[1] <- here("box_data/lichess1700-1900/")
+all_data_path[2] <- here("box_data/lichess2000-2200/")
+all_data_path[3] <- here("box_data/lichess2300-2500/")
+
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+
+
+
+## restrict to rated rapid and shorter here
+## this also removes the NAs, which makes sense
+
+small_data <- lichess_data %>%
+  # filter(Event == "Rated Bullet game") %>%
+  # filter(TimeControl == "60+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("Rated Bullet game", Event))
+
+
+users <- unique(small_data$Username)
+
+small_data$dttm <- as.POSIXct(paste(small_data$UTCDate, small_data$UTCTime),
+                              format="%Y-%m-%d %H:%M:%S", tz = "UTC")
+
+
+small_data %>% 
+  mutate(UserELO = ifelse(Username == White, WhiteElo, BlackElo)) %>% 
+  group_by(Username) %>% 
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>% 
+  select(Username, dttm, UserELO) %>% 
+  filter(Username %in% users[1:16]) %>% 
+  # slice_sample(n = 100) %>% 
+  ggplot(aes(dttm, UserELO, colour = as.factor(Username))) +
+  geom_line() +
+  labs(colour = "User", x = "Date") +
+  geom_hline(yintercept = c(2300, 2500), 
+             col = "red", linetype = "dashed", alpha = 0.5) +
+  facet_wrap(~Username, scales = "free")
+
+```
+
+
+Each player by default starts with a rating of 1500.
+Note that there is a lot of variability in how much time (and how many games)
+each user has played at the "Ratings Bin" they are assigned to. Given
+that current opponents are based only on your current rating, this 
+should likely be accounted for. A player who has played many 
+games where their rating is above 2300 should be different 
+to a player playing their first game after attaining that
+rating. How do we account for this in the model?
+
+```{r}
+## look at different bin
+path_id <- 1
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+
+lichess_data <- files %>% 
+  map_dfr(~read_player(data_path, .x))
+
+## restrict to rated rapid and shorter here
+## this also removes the NAs, which makes sense
+
+small_data_1 <- lichess_data %>%
+  # filter(Event == "Rated Bullet game") %>%
+  # filter(TimeControl == "60+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("Rated Bullet game", Event))
+
+
+users_1 <- unique(small_data_1$Username)
+
+small_data_1$dttm <- as.POSIXct(paste(small_data_1$UTCDate,
+                                      small_data_1$UTCTime),
+                              format="%Y-%m-%d %H:%M:%S", tz = "UTC")
+
+
+small_data_1 %>% 
+  mutate(UserELO = ifelse(Username == White, WhiteElo, BlackElo)) %>% 
+  group_by(Username) %>% 
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>% 
+  select(Username, dttm, UserELO) %>% 
+  filter(Username %in% users_1[1:16]) %>% 
+  # slice_sample(n = 100) %>% 
+  ggplot(aes(dttm, UserELO, colour = as.factor(Username))) +
+  geom_line() +
+  labs(colour = "User", x = "Date") +
+  geom_hline(yintercept = c(1700, 1900), 
+             col = "red", linetype = "dashed", alpha = 0.5) +
+  facet_wrap(~Username, scales = "free")
+```
+
+
+- How could we control for the experience of a player here? Would this
+impact the presence of these winner effects?
+
+
+
+## Old Questions
 
 Do focal players play each other in this data?
 
