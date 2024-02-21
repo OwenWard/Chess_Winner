@@ -28,13 +28,13 @@ all_save_path <- rep(NA, 3)
 all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
-all_save_path[1] <- here("results/lichess1700-1900/")
+all_save_path[1] <- here("results/lichess1700-1900_feb/")
 
 # all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
 # ## if need to run it locally
 
-all_save_path[2] <- here("results/lichess2000-2200/")
-all_save_path[3] <- here("results/lichess2300-2500/")
+all_save_path[2] <- here("results/lichess2000-2200_feb/")
+all_save_path[3] <- here("results/lichess2300-2500_feb/")
 
 
 data_path <- all_data_path[path_id]
@@ -96,11 +96,11 @@ small_data <- lichess_data %>%
   filter(Variant == "Standard") %>%
   filter(grepl("Rated Bullet game", Event))
 # 
-# small_data <- lichess_data %>%
-#   # filter(Event == "Rated Bullet game") %>%
-#   # filter(TimeControl == "60+0") %>%
-#   filter(Variant == "Standard") %>%
-#   filter(grepl("Rated Blitz game", Event))
+small_data <- lichess_data %>%
+  # filter(Event == "Rated Bullet game") %>%
+  # filter(TimeControl == "60+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("Rated Blitz game", Event))
 
 users <- unique(small_data$Username)
 
@@ -148,7 +148,7 @@ stan_data_ave <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
-stan_file <- here("owen", "model3.stan")
+stan_file <- here("owen", "cluster_scripts", "model_feb24.stan")
 
 mod <- cmdstan_model(stan_file)
 
@@ -171,7 +171,8 @@ names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_ave$draws(c("mu2", "mu1",  "gamma1", "gamma2")),
+mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2", "sigma_alpha",
+                           "sigma_beta")),
           facet_args = list(scales = "free"))
 
 ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
