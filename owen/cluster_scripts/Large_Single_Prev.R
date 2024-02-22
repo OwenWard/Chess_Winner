@@ -28,9 +28,9 @@ all_save_path <- rep(NA, 3)
 all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
-all_save_path[1] <- here("results/lichess1700-1900/")
-all_save_path[2] <- here("results/lichess2000-2200/")
-all_save_path[3] <- here("results/lichess2300-2500/")
+all_save_path[1] <- here("results/lichess1700-1900_feb/")
+all_save_path[2] <- here("results/lichess2000-2200_feb/")
+all_save_path[3] <- here("results/lichess2300-2500_feb/")
 
 
 data_path <- all_data_path[path_id]
@@ -167,7 +167,8 @@ names(players) <- paste0("delta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_ave$draws(c("mu2", "mu1",  "gamma1", "gamma2")),
+mcmc_hist(fit3_ave$draws(c("mu_delta", "gamma1", "gamma2", "sigma_alpha",
+                           "sigma_delta")),
           facet_args = list(scales = "free"))
 
 # ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model_prev.png"),
