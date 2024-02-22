@@ -30,29 +30,24 @@ parameters {
   array[J] real alpha;
   // array[J] real beta;
   array[J] real delta; // the parameter for the single previous game
+  real mu_delta;
   real gamma1;
   real gamma2;
-  real mu1;
-  // real tau1;
-  real mu2;
-  // real tau2;
-  // real mu3;
-  // real tau3;
+  real <lower=0> sigma_alpha;
+  real <lower=0> sigma_beta;
+  real <lower=0> sigma_g1;
+  real <lower=0> sigma_g2;
+  real <lower=0> sigma_1;
 }
 
 
 model {
-  mu1 ~ normal(0, 1);
-  // tau1 ~ cauchy(0, 5);
-  mu2 ~ normal(0, 1);
-  // tau2 ~ cauchy(0, 5);
-  // mu3 ~ normal(0, 1);
-  // tau3 ~ normal(0, 5);
-  alpha ~ normal(mu2, 1);
+  mu_delta ~ normal(0, sigma_1);
+  alpha ~ normal(0, sigma_alpha);
   // beta ~ normal(mu1, tau1);
-  delta ~ normal(mu1, 1);
-  gamma1 ~ normal(0, 1);
-  gamma2 ~ normal(0, 1);
+  delta ~ normal(mu_delta, sigma_delta);
+  gamma1 ~ normal(0, sigma_g1);
+  gamma2 ~ normal(0, sigma_g2);
   vector[N] pred;
   for(i in 1:N){
     pred[i] = alpha[id[i]] + //beta[id[i]] * win_prop[i] +
