@@ -148,7 +148,7 @@ stan_data_ave <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
-stan_file <- here("owen", "cluster_scripts", "model_feb24.stan")
+stan_file <- here("owen", "cluster_scripts", "model_feb29.stan")
 
 mod <- cmdstan_model(stan_file)
 
