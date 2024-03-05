@@ -194,10 +194,12 @@ theme_set(bayesplot_theme_get())
 random_effect_post %>% 
   filter(param == 2) %>% 
   ggplot(aes(value)) +
-  geom_histogram(fill = "#6497b1") +
+  geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
              labeller = player_labels) +
-  labs(title = "Individual Winner Effects")
+  labs(title = "Individual Winner Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ## this is almost what I want now, just make it nicer
 
@@ -217,7 +219,7 @@ ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
 random_effect_post %>% 
   filter(param == 1) %>% 
   ggplot(aes(value)) +
-  geom_histogram(fill = "#6497b1") +
+  geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
              labeller = player_labels) +
   labs(title = "Individual Player Effects")
