@@ -24,7 +24,6 @@ path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
 ### load in the data to use
 
-## rerun for 2000-2200 next
 all_data_path <- rep(NA, 3)
 all_save_path <- rep(NA, 3)
 all_data_path[1] <- here("box_data/lichess1700-1900/")

@@ -2,6 +2,9 @@
 ###########
 ## Fit the current model to a large selection of 
 ## games on a cluster
+## here the game history used is only the result of the previous game,
+## normalized to the difference relative to the total 
+## proportion of games won by the player across the complete dataset
 ##
 
 
@@ -86,17 +89,17 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-# small_data <- lichess_data %>%
-#   # filter(Event == "Rated Bullet game") %>%
-#   # filter(TimeControl == "60+0") %>%
-#   filter(Variant == "Standard") %>%
-#   filter(grepl("Rated Bullet game", Event))
-
 small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>%
   # filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
-  filter(grepl("Rated Blitz game", Event))
+  filter(grepl("Rated Bullet game", Event))
+
+# small_data <- lichess_data %>%
+#   # filter(Event == "Rated Bullet game") %>%
+#   # filter(TimeControl == "60+0") %>%
+#   filter(Variant == "Standard") %>%
+#   filter(grepl("Rated Blitz game", Event))
 
 users <- unique(small_data$Username)
 
@@ -108,7 +111,7 @@ users <- small_data %>%
   filter(n >= 10) %>% 
   pull(Username)
 
-tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>% 
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>%  
   as_tibble()
 
 
@@ -123,9 +126,10 @@ hist_data_init <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = lag(focal_win_prop, n = 2, default = 0) - 
-           mean(focal_win_prop),
-         prev_game = lag(focal_result, default = 0)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, n = 1, default = 0) - 
+           mean(focal_result), 
+         ## focal_win_prop is the average of the running win proportion
+         prev_game = lag(focal_result, default = 0) - mean(focal_result)) %>% 
   filter(focal_result != 0.5)
 
 
@@ -141,10 +145,12 @@ stan_data_ave <- list(N = nrow(hist_data_init),
                       id = hist_data_init$focal_id,
                       colour = hist_data_init$focal_white,
                       elo = hist_data_init$elo_diff,
-                      prev_game = hist_data_init$prev_game)
+                      win_prop = hist_data_init$prev_game)
+
+## coding this in as the win prop now instead
 
 
-stan_file <- here("owen", "model5.stan")
+stan_file <- here("owen", "cluster_scripts", "model_feb29.stan")
 
 mod <- cmdstan_model(stan_file)
 
@@ -157,39 +163,61 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save the stan fit as not actually that large here
 
-# fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model_prev.RDS"))
-fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
+fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model_prev.RDS"))
+# fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
 
 ## create some summary plots of these results
 
+random_effect_post <- fit3_ave$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
 players <- users
-names(players) <- paste0("delta[", 1:length(users), "]")
+names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_ave$draws(c("mu_delta", "gamma1", "gamma2", "sigma_alpha",
-                           "sigma_delta")),
+mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2", 
+                           "sigma_1", "tau[1]", "tau[2]",
+                           "sigma_g1", "sigma_g2")),
           facet_args = list(scales = "free"))
 
-# ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model_prev.png"),
-                         # width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model_prev.png"),
-       width = 8, height = 8, units = "in")
-
-mcmc_hist(fit3_ave$draws("delta"),
-          facet_args = list(labeller = player_labels)) 
-
-# ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model_prev.png"),
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model_prev.png"),
+width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model_prev.png"),
 #        width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model_prev.png"),
+
+theme_set(bayesplot_theme_get())
+
+random_effect_post %>% 
+  filter(param == 2) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
+  facet_wrap(~player_id, scales = "free",
+             labeller = player_labels) +
+  labs(title = "Individual Winner Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
-
-names(players) <- paste0("alpha[", 1:length(users), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit3_ave$draws("alpha"),
-          facet_args = list(labeller = player_labels))
-
-# ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model_prev.png"),
+# ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model_prev.png"),
 #        width = 8, height = 8, units = "in")
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model_prev.png"),
+
+random_effect_post %>% 
+  filter(param == 1) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
+  facet_wrap(~player_id, scales = "free",
+             labeller = player_labels) +
+  labs(title = "Individual Player Effects")
+
+
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
