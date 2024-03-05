@@ -1,7 +1,9 @@
-##### November 21 2023 ######
+##### March 5th 2024 ######
 ###########
 ## Fit the current model to a large selection of 
 ## games on a cluster
+## stan model is somewhat optimized for speed to fit to faster, using 
+## matrix multiplication
 ##
 
 
@@ -130,7 +132,7 @@ init_data <- tidy_games %>%
   select(focal_user, focal_id, focal_white, 
          focal_win_prop, elo_diff, focal_result) %>% 
   group_by(focal_id) %>% 
-  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_win_prop)) %>% 
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_result)) %>% 
   filter(focal_result != 0.5)
 
 cat("----------\n")
@@ -159,7 +161,8 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        refresh = 100)
 
 
-## save the stan fit as not actually that large here
+## save the stan fit as not actually that large here, 
+## when no generated quantities
 
 fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model.RDS"))
 # fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model.RDS"))
@@ -201,7 +204,6 @@ random_effect_post %>%
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
-## this is almost what I want now, just make it nicer
 
 # mcmc_hist(fit3_ave$draws("beta"),
 #           facet_args = list(labeller = player_labels)) 
@@ -211,10 +213,6 @@ ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
 # ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model.png"),
 #        width = 8, height = 8, units = "in")
 
-# names(players) <- paste0("alpha[", 1:length(users), "]")
-# player_labels <- as_labeller(players)
-# mcmc_hist(fit3_ave$draws("alpha"),
-#           facet_args = list(labeller = player_labels))
 
 random_effect_post %>% 
   filter(param == 1) %>% 
