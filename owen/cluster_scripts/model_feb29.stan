@@ -25,10 +25,14 @@ data {
 parameters {
   real mu_beta;
   vector[2] nu;                        // location of beta[ , j]
-  vector<lower=0>[2] tau;              // scale of beta[ , j]
+  vector<lower=0>[2] tau;              // scale of beta[ , j], sd of effects
   cholesky_factor_corr[2] L_Omega;     // Cholesky of correlation of beta[ , j]
   matrix[2, J] beta_std;               // standard beta (beta - nu) / Sigma
-  // real<lower=0> sigma;                 // observation error for y
+  real<lower=0> sigma_1;               // sd of mu_beta
+  real<lower=0> sigma_g1;              // sd of gamma1
+  real<lower=0> sigma_g2;              // sd of gamma2
+  real gamma1;                         // gamma1
+  real gamma2;                         // gamma2
 }
 transformed parameters {
   matrix[2, J] beta = rep_matrix(nu, J)
@@ -36,28 +40,25 @@ transformed parameters {
 }
 
 model {
-  // mu_beta ~ normal(0, sigma_1);
-  // sigma_alpha ~ inv_gamma(1, 1);
-  // sigma_beta ~ inv_gamma(1, 1);
-  // sigma_g1 ~ inv_gamma(1, 1);
-  // sigma_g2 ~ inv_gamma(1, 1);
+  mu_beta ~ normal(0, sigma_1);
+  sigma_g1 ~ inv_gamma(1, 1);
+  sigma_g2 ~ inv_gamma(1, 1);
   // alpha ~ normal(0, sigma_alpha);
   // beta ~ normal(mu_beta, sigma_beta);
-  // gamma1 ~ normal(0, sigma_g1);
-  // gamma2 ~ normal(0, sigma_g2);
-  // sigma_1 ~ inv_gamma(1, 1);
+  gamma1 ~ normal(0, sigma_g1);
+  gamma2 ~ normal(0, sigma_g2);
+  sigma_1 ~ inv_gamma(1, 1);
   // L_Omega ~ lkj_corr_cholesky(2);
   nu[1] ~ normal(0, 1);
-  nu[2] ~ normal(mu_beta, 1); // for example
+  nu[2] ~ normal(mu_beta, 1); // because we standardize here, these sds are 1
   mu_beta ~ normal(0, 1);
   tau ~ inv_gamma(1, 1);
   L_Omega ~ lkj_corr_cholesky(2);
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
-  // sigma ~ exponential(1);
   vector[N] pred;
   for(i in 1:N){
-    pred[i] = beta[1, id[i]] + beta[2, id[i]] * win_prop[i];// +
-    // gamma1 * colour[i] + gamma2 * elo[i];
+    pred[i] = beta[1, id[i]] + beta[2, id[i]] * win_prop[i] +
+    gamma1 * colour[i] + gamma2 * elo[i];
     // y[i] ~ bernoulli_logit(alpha[id[i]] + beta[id[i]] * win_prop[i] +
     // gamma1 * colour[i] + gamma2 * elo[i]);
   }
