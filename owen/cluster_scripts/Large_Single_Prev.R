@@ -111,6 +111,8 @@ users <- small_data %>%
   filter(n >= 10) %>% 
   pull(Username)
 
+saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
+
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>%  
   as_tibble()
 
@@ -186,8 +188,9 @@ mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2",
                            "sigma_g1", "sigma_g2")),
           facet_args = list(scales = "free"))
 
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model_prev.png"),
-width = 8, height = 8, units = "in")
+ggsave(filename = paste0(save_path, 
+                         "/global_pars_all_rated_bullet_model_prev.png"),
+                         width = 8, height = 8, units = "in")
 # ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model_prev.png"),
 #        width = 8, height = 8, units = "in")
 
@@ -198,12 +201,13 @@ random_effect_post %>%
   ggplot(aes(value)) +
   geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
-             labeller = player_labels) +
+             labeller = player_labels, ncol = 5) +
   labs(title = "Individual Winner Effects", y = "") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model_prev.png"),
+ggsave(filename = paste0(save_path, 
+                         "/winner_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
 # ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model_prev.png"),
 #        width = 8, height = 8, units = "in")
@@ -213,11 +217,12 @@ random_effect_post %>%
   ggplot(aes(value)) +
   geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
-             labeller = player_labels) +
+             labeller = player_labels, ncol = 5) +
   labs(title = "Individual Player Effects")
 
 
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model_prev.png"),
+ggsave(filename = paste0(save_path, 
+                         "/indiv_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
 # ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model_prev.png"),
 #        width = 8, height = 8, units = "in")
