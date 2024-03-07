@@ -117,7 +117,9 @@ saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>%  
   as_tibble()
 
-
+cat("----------\n")
+print(dim(tidy_games))
+cat("----------\n")
 
 hist_data_init <- tidy_games %>% 
   mutate(WhiteElo = as.numeric(WhiteElo), 
@@ -161,7 +163,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
-                       refresh = 100)
+                       refresh = 1, iter_warmup = 50, iter_sampling = 50)
 
 
 ## save the stan fit as not actually that large here
