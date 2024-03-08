@@ -144,6 +144,8 @@ cat("----------\n")
 
 ### then fit the models
 
+hist_data_init <- hist_data_init[sample(1:nrow(hist_data_init), 10000), ]
+
 stan_data_ave <- list(N = nrow(hist_data_init),
                       J = length(users),
                       y = hist_data_init$focal_result,
@@ -163,7 +165,8 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
-                       refresh = 1, iter_warmup = 50, iter_sampling = 50)
+                       iter_warmup = 20, iter_sampling = 20,
+                       refresh = 100)
 
 
 ## save the stan fit as not actually that large here
