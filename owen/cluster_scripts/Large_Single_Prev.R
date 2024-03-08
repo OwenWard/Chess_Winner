@@ -144,7 +144,6 @@ cat("----------\n")
 
 ### then fit the models
 
-hist_data_init <- hist_data_init[sample(1:nrow(hist_data_init), 5000), ]
 
 stan_data_ave <- list(N = nrow(hist_data_init),
                       J = length(users),
@@ -165,7 +164,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
-                       iter_warmup = 20, iter_sampling = 20,
+                       # iter_warmup = 20, iter_sampling = 20,
                        refresh = 100)
 
 
