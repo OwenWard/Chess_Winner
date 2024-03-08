@@ -144,7 +144,7 @@ cat("----------\n")
 
 ### then fit the models
 
-hist_data_init <- hist_data_init[sample(1:nrow(hist_data_init), 10000), ]
+hist_data_init <- hist_data_init[sample(1:nrow(hist_data_init), 5000), ]
 
 stan_data_ave <- list(N = nrow(hist_data_init),
                       J = length(users),
