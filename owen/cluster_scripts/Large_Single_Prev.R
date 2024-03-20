@@ -91,13 +91,13 @@ lichess_data <- files %>%
 
 small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>%
-  # filter(TimeControl == "60+0") %>%
+  filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
   filter(grepl("Rated Bullet game", Event))
 
 # small_data <- lichess_data %>%
 #   # filter(Event == "Rated Bullet game") %>%
-#   # filter(TimeControl == "60+0") %>%
+#   # filter(TimeControl == "180+0") %>%
 #   filter(Variant == "Standard") %>%
 #   filter(grepl("Rated Blitz game", Event))
 
@@ -111,7 +111,7 @@ users <- small_data %>%
   filter(n >= 10) %>% 
   pull(Username)
 
-saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
+# saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 # saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>%  
