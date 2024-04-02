@@ -100,26 +100,29 @@ in ELO ranking)
 We then partially pool the $\alpha$ and $\beta$ coefficients, so
 
 $$
-\alpha_j \sim \mathcal{N}(\mu_2, 1)
+\alpha_j \sim \mathcal{N}(0, \sigma_{\alpha}^2)
 $$
 $$
-\mu_2 \sim \mathcal{N}(0, 1)
-$$
-$$
-\tau_2 \sim \mathcal{N}(0, 1)
+\sigma_{\alpha} \sim \mathcal{IG}(1, 1)
 $$
 
 and similarly
 
 
 $$
-\beta_j \sim \mathcal{N}(\mu_1, 1)
+\beta_j \sim \mathcal{N}(\mu_{\beta}, \sigma_{\beta}^2)
 $$
 $$
-\mu_1 \sim \mathcal{N}(0, 1)
+\mu_{\beta} \sim \mathcal{N}(0, \sigma^2)
 $$
 $$
-\tau_1 \sim \mathcal{N}(0, 1)
+\sigma_{\beta} \sim \mathcal{IG}(1, 1)
+$$
+
+and 
+
+$$
+\sigma \sim \mathcal{IG}(1,1).
 $$
 
 We rescale the win ratio $x_{ij}$, by the average win ratio of
@@ -137,7 +140,7 @@ from black to white,
 and $\gamma_2$ gives how the win probability changes as the focal player
 has a better ELO than their opponent.
 
-__These predictors are not currently rescaled__.
+__These fixed effect predictors are not currently rescaled__.
 
 
 ## Fitting this to Lichess Data
@@ -150,36 +153,45 @@ of the players in a given rating range, due to time constraints.
 
 We fit this to games from all players in the 1700-1900 range. 
 We looked only at standard rated bullet games (no tournaments, etc),
-which was 675k games, ranging from 500 - 128k games per player.
+which was 590k games, ranging from 30 - 127k games per 36 players.
 Fitting this model takes many hours on a computing cluster.
 
 This results in the following estimated parameters.
 
 
-```{r 17-19-bullet-global, fig.path = "figures/"}
-fit <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+```{r 17-19-bullet-global-update, fig.path = "figures/"}
+fit <- readRDS(here("results/", "lichess1700-1900_mar/", 
                     "all_rated_bullet_model.RDS"))
 
-users <- readRDS(here("results/", "Full_Fits",
-                      "lichess1700-1900/",
+users <- readRDS(here("results/",
+                      "lichess1700-1900_mar/",
                       "users_bullet.RDS"))
 
 
-mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+fit$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
+
+mcmc_hist(fit$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 17-19 Bullet",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
-       Gamma2 is ELO Difference")
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference, others SDs")
 
-
-fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+# mcmc_hist(fit$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+#   labs(title = "Global Parameters 17-19 Bullet",
+#        subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+#        Gamma2 is ELO Difference")
+# 
+# 
+# fit$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
 
 
 ```
 
 
-- Here the mean for $\mu_2$ is -0.0483, corresponding to a 48% chance of 
-winning as black against an equally ranked opponent. This parameter
-is not clearly different from 0 here. Posterior SD is large.
+<!-- - Here the mean for $\mu_2$ is -0.0483, corresponding to a 48% chance of  -->
+<!-- winning as black against an equally ranked opponent. This parameter -->
+<!-- is not clearly different from 0 here. Posterior SD is large. -->
 
 - $\gamma_1$ is estimated to be about 0.094, indicating that playing 
 as white increases the win probability by 2.5%, holding other parameters 
@@ -189,22 +201,45 @@ fixed. Posterior SD is very small.
 probability by about 1%, while a 100 ELO score difference 
 increases the win probability by about 9%. Posterior SD is very small.
 
-- The global estimate for $\mu_1$, the global winner effect, is 
+- The global estimate for $\mu_{\beta}$, the global winner effect, is 
 around 0. Posterior SD is large here.
 
 
 
-```{r winner-effects-17-19-bullet, fig.path = "figures/"}
+```{r winner-effects-17-19-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
+
+random_effect_post <- fit$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
 
 players <- users
 names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 17-19 Bullet")
+random_effect_post %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 6) +
+  labs(title = "Winner Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 ```
 
 
@@ -216,80 +251,133 @@ different players.
 are only negative and some are centered around or near 0.
 
 
--The largest posterior mean here is 1.32. This is saying that if on
+-The largest posterior mean here is 0.4. This is saying that if on
 average you win 50% of your games, but have instead won 10 in a row, your
-probability of winning the next would increase by ~16% over that baseline.
+probability of winning the next would increase by ~5% over that baseline.
 However most estimated effects are small, and most of these posterior
 distributions contain 0.
 
 
-```{r indiv-effects-17-19-bullet, fig.path = "figures/"}
+```{r indiv-effects-17-19-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
 
-names(players) <- paste0("alpha[", 1:length(users), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 17-19 Bullet")
+# names(players) <- paste0("alpha[", 1:length(users), "]")
+# player_labels <- as_labeller(players)
+# mcmc_hist(fit$draws("alpha"),
+#           facet_args = list(labeller = player_labels, ncol = 5)) +
+#   labs(title = "Individual Player Effects 17-19 Bullet")
+
+random_effect_post %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 6) +
+  labs(title = "Individual Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 ```
 
 - Most of the individual player effects are somewhat negative but
 close to 0.
 
-- Many are quite similar to the global parameter here.
+<!-- - Many are quite similar to the global parameter here. -->
 
 
 ### 2000-2200 Players
 
 
 We fit this model also to all players rated between 2000 and 2200. 
-With the same restrictions on the games this gives us 834k games.
-We have between 1200 and 89k games for each of these players.
+With the same restrictions on the games this gives us 722k games.
+We have between 150 and 88k games for each of these 39 players.
 
 
-```{r global-effects-20-22-bullet, fig.path = "figures/"}
+```{r global-effects-20-22-bullet-update, fig.path = "figures/"}
 
-fit2 <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+fit2 <- readRDS(here("results/", "lichess2000-2200_mar/", 
                     "all_rated_bullet_model.RDS"))
 
 
-mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+# mcmc_hist(fit2$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+#   labs(title = "Global Parameters 20-22 Bullet",
+#        subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+#        Gamma2 is ELO Difference")
+mcmc_hist(fit2$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 20-22 Bullet",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
-       Gamma2 is ELO Difference")
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference, others SDs")
 
-users_20_22 <- readRDS(here("results/", "Full_Fits",
-                      "lichess2000-2200/",
+users_20_22 <- readRDS(here("results/", 
+                      "lichess2000-2200_mar/",
                       "users_bullet.RDS"))
 
-fit2$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit2$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]", "tau[2]",
+                           "sigma_1", "sigma_g1", "sigma_g2"))
 
 ```
 
 
 
-```{r winner-effects-20-22-bullet, fig.path = "figures/"}
+```{r winner-effects-20-22-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
 
 players <- users_20_22
 names(players) <- paste0("beta[", 1:length(users_20_22), "]")
 
+random_effect_post2 <- fit2$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit2$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 20-22 Bullet")
+random_effect_post2 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post2 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
-```{r indiv-effects-20-22-bullet, fig.path = "figures/"}
+```{r indiv-effects-20-22-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
 
-names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit2$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects, 20-22 Bullet")
+random_effect_post2 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Individual Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+
+# names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
+# player_labels <- as_labeller(players)
+# mcmc_hist(fit2$draws("alpha"),
+#           facet_args = list(labeller = player_labels, ncol = 5)) +
+#   labs(title = "Individual Player Effects, 20-22 Bullet")
 ```
 
 <!-- - Here the effect of a difference in ranking appears to be slightly larger. -->
@@ -306,28 +394,33 @@ mcmc_hist(fit2$draws("alpha"),
 ### 2300-2500 Players 
 
 
-We look at all players rated between 2300 and 2500. This gives us 703k games,
-with players playing 400-74k games. 
+We look at all players rated between 2300 and 2500. This gives us 599k games,
+with 38 players playing 17-74k games. 
 
-```{r global-effects-23-25-bullet, fig.path = "figures/"}
-fit3 <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+Size of the colour effect increases here when the ratings are larger,
+as does the ELO difference effect.
+
+```{r global-effects-23-25-bullet-update, fig.path = "figures/"}
+fit3 <- readRDS(here("results/", "lichess2300-2500_mar/", 
                     "all_rated_bullet_model.RDS"))
 
 
-users_23_25 <- readRDS(here("results/", "Full_Fits",
-                      "lichess2300-2500/",
+users_23_25 <- readRDS(here("results/", 
+                      "lichess2300-2500_mar/",
                       "users_bullet.RDS"))
 
-mcmc_hist(fit3$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+mcmc_hist(fit3$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 23-25 Bullet",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
-       Gamma2 is ELO Difference")
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
+       Gamma2 is ELO Difference, others SDs")
 
-fit3$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit3$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
 ```
 
 
-```{r winner-effects-23-25-bullet, fig.path = "figures/"}
+```{r winner-effects-23-25-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
 
 players <- users_23_25
@@ -335,61 +428,139 @@ names(players) <- paste0("beta[", 1:length(users_23_25), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 23-25 Bullet")
+random_effect_post3 <- fit3$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
 
+
+
+random_effect_post3 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post3 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
 
-```{r indiv-effects-23-25-bullet, fig.path = "figures/"}
+```{r indiv-effects-23-25-bullet-update, fig.path = "figures/"}
 #| fig-height: 9
 
-names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit3$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 23-25 Bullet")
+
+random_effect_post3 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Individual Effects", y = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+# names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
+# player_labels <- as_labeller(players)
+# mcmc_hist(fit3$draws("alpha"),
+#           facet_args = list(labeller = player_labels, ncol = 5)) +
+#   labs(title = "Individual Player Effects 23-25 Bullet")
 ```
 
 
 ## Repeating for Blitz Games
 
+
+NOT RERUN YET
+
 ### 1700-1900
 
-Note that now there are 187k games here, considerably fewer than 
-the number of bullet games played. This ranges from 35k games to 8 players
+Note that now there are 109k games here, considerably fewer than 
+the number of bullet games played. There are 8 players
 who play less than 25 blitz games.
 
 ```{r global-effects-17-19-blitz, fig.path = "figures/"}
 
-fit_blitz <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+fit_blitz <- readRDS(here("results/", "lichess1700-1900_mar/", 
                     "all_rated_blitz_model.RDS"))
 
+users_blitz <- readRDS(here("results/",
+                      "lichess1700-1900_feb/",
+                      "users_blitz.RDS"))
 
-mcmc_hist(fit_blitz$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+mcmc_hist(fit_blitz$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 17-19 Blitz",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit_blitz$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit_blitz$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
 ```
 
 
 ```{r winner-effects-17-19-blitz, fig.path = "figures/"}
 #| fig-height: 9
 
-## winner effects
-players <- users
-names(players) <- paste0("beta[", 1:length(users), "]")
+# ## winner effects
+# players <- users
+# names(players) <- paste0("beta[", 1:length(users), "]")
+# 
+# player_labels <- as_labeller(players)
+# 
+# mcmc_hist(fit_blitz$draws("beta"),
+#           facet_args = list(labeller = player_labels, ncol = 5)) +
+#   labs(title = "Player Winner Effects, 17-19 Blitz")
+
+
+random_effect_post <- fit_blitz$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+players <- users_blitz
+names(players) <- paste0("beta[", 1:length(users_blitz), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit_blitz$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects, 17-19 Blitz")
+random_effect_post %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects, 1700-1900 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
 
 ```
 
@@ -398,31 +569,47 @@ mcmc_hist(fit_blitz$draws("beta"),
 #| fig-height: 9
 
 ## indiv effects
-names(players) <- paste0("alpha[", 1:length(users), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit_blitz$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 17-19 Blitz")
+random_effect_post %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Indiv Effects, 1700-1900 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+# names(players) <- paste0("alpha[", 1:length(users), "]")
+# player_labels <- as_labeller(players)
+# mcmc_hist(fit_blitz$draws("alpha"),
+#           facet_args = list(labeller = player_labels, ncol = 5)) +
+#   labs(title = "Individual Player Effects 17-19 Blitz")
 ```
 
 ### 2000-2200
 
-Here we have 250k games, ranging from 64k to 16 per player.
+Here we have 190k games.
 
 ```{r global-effects-20-22-blitz, fig.path = "figures/"}
 #| fig-height: 9
 
-fit2_blitz <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+fit2_blitz <- readRDS(here("results/", "lichess2000-2200_feb/", 
                     "all_rated_blitz_model.RDS"))
 
+users_blitz_2 <- readRDS(here("results/",
+                      "lichess2000-2200_feb/",
+                      "users_blitz.RDS"))
 
-mcmc_hist(fit2_blitz$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+mcmc_hist(fit2_blitz$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 20-22 Blitz",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       subtitle = "mu_beta is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit2_blitz$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit2_blitz$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
 
 ```
 
@@ -430,15 +617,38 @@ fit2_blitz$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
 ```{r winner-effects-20-22-blitz, fig.path= "figures/"}
 #| fig-height: 9
 
-## winner effects
-players <- users_20_22
-names(players) <- paste0("beta[", 1:length(users_20_22), "]")
+
+random_effect_post2 <- fit2_blitz$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+players <- users_blitz_2
+names(players) <- paste0("beta[", 1:length(users_blitz_2), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit2_blitz$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 20-22 Blitz")
+random_effect_post2 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post2 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects, 2000-2200 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
@@ -447,12 +657,17 @@ mcmc_hist(fit2_blitz$draws("beta"),
 ```{r indiv-effects-20-22-blitz, fig.path = "figures/"}
 #| fig-height: 9
 
-## indiv effects
-names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit2_blitz$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 20-22 Blitz")
+
+random_effect_post2 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Indiv Effects, 2000-2200 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
@@ -461,21 +676,27 @@ Only have limited comparison for these at the moment, so skipped for now.
 
 ### 2300-2500
 
-Here we have only 82k total games, ranging from 15k to 16 games per player.
+Here we have only 62k total games.
 
 ```{r global-effects-23-25-blitz, fig.path = "figures/"}
 #| fig-height: 9
 
-fit3_blitz <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+fit3_blitz <- readRDS(here("results/", "lichess2300-2500_feb/", 
                     "all_rated_blitz_model.RDS"))
 
-mcmc_hist(fit3_blitz$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+users_blitz_3 <- readRDS(here("results/",
+                      "lichess2300-2500_feb/",
+                      "users_blitz.RDS"))
+
+mcmc_hist(fit3_blitz$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters 23-25 Blitz",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       subtitle = "mu_beta is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit3_blitz$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit3_blitz$summary(variables =  c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
 
 ```
 
@@ -484,14 +705,39 @@ fit3_blitz$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
 #| fig-height: 9
 
 ## winner effects
-players <- users_23_25
-names(players) <- paste0("beta[", 1:length(users_23_25), "]")
+players <- users_blitz_3
+names(players) <- paste0("beta[", 1:length(users_blitz_3), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_blitz$draws("beta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects, 23-25 Blitz")
+random_effect_post3 <- fit3_blitz$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+
+
+random_effect_post3 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post3 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects, 2300-2500 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
@@ -500,15 +746,20 @@ mcmc_hist(fit3_blitz$draws("beta"),
 ```{r indiv-effects-23-25-blitz, fig.path = "figures/"}
 #| fig-height: 9
 
-
-## indiv effects
-names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit3_blitz$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects, 23-25 Blitz")
+random_effect_post3 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Indiv Effects, 2300-2500 Blitz", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
+
+
 
 
 ## Alternative Model
@@ -523,77 +774,154 @@ We will only consider this for the bullet games for now.
 
 ```{r 17-19-bullet-prev-global, fig.path = "figures/" }
 
-fit_prev <- readRDS(here("results/", "Full_Fits", "lichess1700-1900/", 
+fit_prev <- readRDS(here("results/", "lichess1700-1900_mar/", 
                     "all_rated_bullet_model_prev.RDS"))
 
+## these will be the same users
 
-mcmc_hist(fit_prev$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
+mcmc_hist(fit_prev$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
   labs(title = "Global Parameters, 17-19 Bullet Previous",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit_prev$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit_prev$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
 ```
 
+
+
+The effects when only looking at the previous game are 
+much smaller than previous 10, mostly very close to 0 here.
 
 ```{r 17-19-bullet-prev-winner, fig.path= "figures/"}
 #| fig-height: 9
 
+## this needs to be updated now..
+
 ## winner effects
 players <- users
-names(players) <- paste0("delta[", 1:length(users), "]")
+
+names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit_prev$draws("delta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects, 17-19 Bullet Previous")
+random_effect_post4 <- fit_prev$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+
+
+random_effect_post4 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post4 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 6) +
+  labs(title = "Winner Effects, 1700-1900 Bullet, Previous Game", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+
 ```
 
+
+The individual effects seem to be quite small here also.
 
 ```{r 17-19-bullet-prev-indiv, fig.path="figures/"}
 #| fig-height: 9
 
 ## indiv effects
-names(players) <- paste0("alpha[", 1:length(users), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit_prev$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects, 17-19 Bullet Previous")
+random_effect_post4 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 6) +
+  labs(title = "Indiv Effects, 1700-1900 Bullet Previous", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+
 ```
 
 
 ### 2000-2200 Bullet
 
 ```{r 20-22-bullet-prev-global, fig.path="figures/"}
-fit2_prev <- readRDS(here("results/", "Full_Fits", "lichess2000-2200/", 
+fit2_prev <- readRDS(here("results/", "lichess2000-2200_mar/", 
                     "all_rated_bullet_model_prev.RDS"))
 
-
-mcmc_hist(fit2_prev$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
-  labs(title = "Global Parameters 20-22 Bullet Previous",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+mcmc_hist(fit2_prev$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
+  labs(title = "Global Parameters, 20-22 Bullet Previous",
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit2_prev$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit2_prev$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
+
+
 ```
 
 
 ```{r 20-22-bullet-prev-winner, fig.path="figures/"}
 #| fig-height: 9
 
-
+## to be updated...
 ## winner effects
 players <- users_20_22
-names(players) <- paste0("delta[", 1:length(users_20_22), "]")
+
+names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit2_prev$draws("delta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 20-22 Bullet Previous")
+random_effect_post5 <- fit2_prev$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+
+
+random_effect_post5 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post5 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects, 2000-2200 Bullet, Previous Game", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+
 ```
 
 
@@ -601,27 +929,35 @@ mcmc_hist(fit2_prev$draws("delta"),
 #| fig-height: 9
 
 ## indiv effects
-names(players) <- paste0("alpha[", 1:length(users_20_22), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit2_prev$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 20-22 Bullet Previous")
+random_effect_post5 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Indiv Effects, 2000-2200 Bullet, Previous Game", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 ```
 
 ### 2300-2500 Bullet
 
 ```{r 23-25-bullet-prev-global, fig.path="figures/"}
-fit3_prev <- readRDS(here("results/", "Full_Fits", "lichess2300-2500/", 
+fit3_prev <- readRDS(here("results/", "lichess2300-2500_mar/", 
                     "all_rated_bullet_model_prev.RDS"))
 
-
-mcmc_hist(fit3_prev$draws(variables = c("mu1", "mu2", "gamma1", "gamma2"))) +
-  labs(title = "Global Parameters 23-25 Bullet Previous",
-       subtitle = "mu1 is Winner Effect, mu2 is Player Effect, Gamma1 is colour,
+mcmc_hist(fit3_prev$draws(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))) +
+  labs(title = "Global Parameters, 23-25 Bullet Previous",
+       subtitle = "mu_beta is Winner Effect, Gamma1 is colour,
        Gamma2 is ELO Difference")
 
 
-fit3_prev$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
+fit3_prev$summary(variables = c("mu_beta", "gamma1", "gamma2", "tau[1]",
+                          "tau[2]", "sigma_1", "sigma_g1", "sigma_g2"))
+
+
 ```
 
 
@@ -630,13 +966,39 @@ fit3_prev$summary(variables = c("mu1", "mu2", "gamma1", "gamma2"))
 
 ## winner effects
 players <- users_23_25
-names(players) <- paste0("delta[", 1:length(users_23_25), "]")
+
+names(players) <- paste0("beta[", 1:length(users), "]")
 
 player_labels <- as_labeller(players)
 
-mcmc_hist(fit3_prev$draws("delta"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Player Winner Effects 23-25 Bullet Previous")
+random_effect_post6 <- fit3_prev$draws() %>% as_draws_df() %>% 
+  select(starts_with("beta[")) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]"))
+
+
+
+random_effect_post6 %>% 
+  filter(param == 2) %>% 
+  select(player_id, value) %>% 
+  group_by(player_id) %>% 
+  summarise(post_mean = mean(value)) %>% 
+  arrange(-post_mean)
+
+
+random_effect_post6 %>% 
+  filter(param == 2) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Winner Effects, 2300-2500 Bullet, Previous Game", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 ```
 
@@ -645,11 +1007,18 @@ mcmc_hist(fit3_prev$draws("delta"),
 #| fig-height: 9
 
 ## indiv effects
-names(players) <- paste0("alpha[", 1:length(users_23_25), "]")
-player_labels <- as_labeller(players)
-mcmc_hist(fit3_prev$draws("alpha"),
-          facet_args = list(labeller = player_labels, ncol = 5)) +
-  labs(title = "Individual Player Effects 23-25 Bullet Previous")
+
+random_effect_post6 %>% 
+  filter(param == 1) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  ggplot(aes(value)) +
+  geom_histogram(fill = "#6497b1", colour = "black", linewidth = 0.2) +
+  facet_wrap(~player_id, scales = "free", labeller = player_labels, 
+             ncol = 5) +
+  labs(title = "Indiv Effects, 2300-2500 Bullet, Previous Game", y = "", x = "") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
 ```
 
 
@@ -795,6 +1164,8 @@ lichess_data <- files %>%
 small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>%
   # filter(TimeControl == "60+0") %>%
+  ## here multiple time formats will contribute, so going to include them
+  ## for now
   filter(Variant == "Standard") %>%
   filter(grepl("Rated Bullet game", Event))
 
