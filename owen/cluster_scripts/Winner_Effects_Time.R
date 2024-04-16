@@ -137,7 +137,7 @@ saveRDS(users, file = paste0(save_path, "select_users_bullet.RDS"))
 
 ## fit to the first 1000 games
 
-tidy_games <- map_dfr(users, get_hist, first_games, prev_n = 10) %>% 
+tidy_games <- map_dfr(users, get_hist, first_games, prev_n = 1) %>% 
   as_tibble()
 
 
@@ -186,7 +186,7 @@ fit3_first <- mod$sample(data = stan_data_ave_first,
 
 
 ## then repeat for the last games for each
-tidy_games <- map_dfr(users, get_hist, last_games, prev_n = 10) %>% 
+tidy_games <- map_dfr(users, get_hist, last_games, prev_n = 1) %>% 
   as_tibble()
 
 
@@ -402,23 +402,23 @@ p2
 
 ## then save all this output and the plots
 
-fit3_first$save_object(file = here(save_path, "blitz_first_games.RDS"))
-fit3_last$save_object(file = here(save_path, "blitz_last_games.RDS"))
+fit3_first$save_object(file = here(save_path, "blitz_first_games_n1.RDS"))
+fit3_last$save_object(file = here(save_path, "blitz_last_games_n1.RDS"))
 
 ggsave(plot = global_winner,
-       filename = paste0(save_path, "/global_winner_first_last_blitz.png"),
+       filename = paste0(save_path, "/global_winner_first_last_blitz_n1.png"),
        width = 8, height = 8, units = "in")
 
 ggsave(plot = winner_effect_plot,
-       filename = paste0(save_path, "/indiv_winner_first_last_blitz.png"),
+       filename = paste0(save_path, "/indiv_winner_first_last_blitz_n1.png"),
        width = 12, height = 8, units = "in")
 
 ggsave(plot = p1,
-       filename = paste0(save_path, "/ppc_first_blitz.png"),
+       filename = paste0(save_path, "/ppc_first_blitz_n1.png"),
        width = 12, height = 8, units = "in")
 
 ggsave(plot = p2,
-       filename = paste0(save_path, "/ppc_last_blitz.png"),
+       filename = paste0(save_path, "/ppc_last_blitz_n1.png"),
        width = 12, height = 8, units = "in")
 
 
