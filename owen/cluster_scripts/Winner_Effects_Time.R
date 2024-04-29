@@ -16,7 +16,10 @@ library(here)
 
 options(mc.cores = parallel::detectCores())
 
-theme_set(theme_bw())
+## source helper functions for reading and transforming data
+## along with defaults for plots, etc
+source(here("analysis/helper.R"))
+
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
@@ -39,47 +42,11 @@ all_save_path[3] <- here("results/lichess2300-2500_mar/")
 
 
 data_path <- all_data_path[path_id]
-save_path <- all_save_path[path_id]
+save_path <- paste0(all_save_path[path_id], "time/")
 
 dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
-# files <- files[1:8]
-
-## need to write a function to process them separately then I think
-
-read_player <- function(path, file){
-  dat <- read_csv(file = paste0(data_path, file),
-                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
-                                   WhiteTitle = col_character(),
-                                   BlackTitle = col_character(),
-                                   WhiteElo = col_character(),
-                                   BlackElo = col_character(),
-                                   FEN = col_character())) %>% 
-    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
-           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
-    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
-           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
-  dat
-}
-
-get_hist <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
-    select(White:BlackElo, focal_white) %>% 
-    mutate(focal_result = case_when(
-      (focal_white == 1 & Result == "1-0") ~ 1,
-      (focal_white == 0 & Result == "0-1") ~ 1,
-      (Result == "1/2-1/2") ~ 0.5,
-      .default = 0
-    )) %>% 
-    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))
-  
-  hist_games
-}
 
 
 lichess_data <- files %>% 
@@ -87,12 +54,10 @@ lichess_data <- files %>%
 
 
 
-
-## restrict to rated rapid and shorter here
+## restrict to rated blitz and shorter here
 ## this also removes the NAs, which makes sense
 
 small_data <- lichess_data %>%
-  # filter(Event == "Rated Bullet game") %>%
   filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
   filter(grepl("Rated Bullet game", Event))
@@ -129,14 +94,12 @@ last_games <- small_data %>%
   ungroup()
 
 
-
-
 users <- select_users
 
+## save the users chosen for this
 saveRDS(users, file = paste0(save_path, "select_users_bullet.RDS"))
 
 ## fit to the first 1000 games
-
 tidy_games <- map_dfr(users, get_hist, first_games, prev_n = 1) %>% 
   as_tibble()
 
@@ -182,10 +145,10 @@ fit3_first <- mod$sample(data = stan_data_ave_first,
 
 
 ## save the stan fit as not actually that large here
-# fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model.RDS"))
+fit3_first$save_object(file = here(save_path, "select_users_first_bullet.RDS"))
 
 
-## then repeat for the last games for each
+## then repeat for the last 1000 games for each
 tidy_games <- map_dfr(users, get_hist, last_games, prev_n = 1) %>% 
   as_tibble()
 
@@ -226,12 +189,10 @@ fit3_last <- mod$sample(data = stan_data_ave_last,
                          parallel_chains = 4,
                          refresh = 100)
 
-
+fit3_last$save_object(file = here(save_path, "select_users_last_bullet.RDS"))
 
 
 fit3_first$summary()
-
-
 fit3_last$summary()
 
 
@@ -239,27 +200,42 @@ fit3_last$summary()
 
 
 global_winner <- as_draws_df(fit3_first$draws(variables = "mu_beta")) %>% 
-  rename("Initial Winner" = mu_beta) %>% 
+  rename("Initial Games" = mu_beta) %>% 
   bind_cols(as_draws_df(fit3_last$draws(variables = "mu_beta")) %>% 
-              rename("Later Winner" = mu_beta)) %>% 
-  select(`Initial Winner`, `Later Winner`) %>% 
+              rename("Later Games" = mu_beta)) %>% 
+  select(`Initial Games`, `Later Games`) %>% 
   pivot_longer(cols = everything()) %>% 
   ggplot(aes(value, fill = name)) +
   geom_histogram(position = "identity") +
   facet_wrap(~name, ncol = 1) +
-  labs(fill = element_blank(), y = element_blank(), x = element_blank())
+  labs(fill = element_blank(), y = element_blank(), x = element_blank()) +
+  theme(legend.position = "none",
+        axis.text = element_text(size = axis_text_size),
+        axis.title = element_text(size = axis_title),
+        legend.text = element_text(size = legend_text),
+        strip.text = element_text(size = axis_title),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(size = title_size)) +
+  # labs(title = "Selected 1700-1900 Bullet Players") +
+  NULL
+  
+global_winner
 
-## basically no difference between them here...
+
+ggsave(filename = paste0(save_path, "global_winner_first_last_bullet.png"),
+       global_winner,
+       width = 7, height = 6, dpi = 600)
+
+## basically no difference between them here, slightly more variability early on
 
 ## then try to repeat this for the winner effects 
-
 ## do this for the individual winner effect estimates, and
 ## the global parameter estimates, and then save the output
 
 
 
 ## indiv winner effects
-
 random_effect_first <- fit3_first$draws() %>% as_draws_df() %>%
   select(starts_with("beta[")) %>%
   pivot_longer(cols = everything()) %>%
@@ -267,7 +243,7 @@ random_effect_first <- fit3_first$draws() %>% as_draws_df() %>%
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
          player_id = paste0("beta[", id, "]")) %>% 
-  mutate(when = "First")
+  mutate(when = "Initial")
 
 random_effect_last <- fit3_last$draws() %>% as_draws_df() %>%
   select(starts_with("beta[")) %>%
@@ -276,7 +252,7 @@ random_effect_last <- fit3_last$draws() %>% as_draws_df() %>%
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
          player_id = paste0("beta[", id, "]")) %>% 
-  mutate(when = "Last")
+  mutate(when = "Later")
 
 
 
@@ -284,26 +260,46 @@ betas <- bind_rows(random_effect_first, random_effect_last) %>%
   select(value, param, id, when)
 
 
+## need to give these the correct names here
+player_id <- tibble(id = as.character(1:10), player = users)
 
-winner_effect_plot <- betas %>% filter(param == 2) %>% 
+betas %>% left_join(player_id, by = "id") %>% 
+  mutate(player = factor(player, levels = users))
+
+
+
+winner_effect_plot <- betas %>% 
+  left_join(player_id, by = "id") %>% 
+  mutate(player = factor(player, levels = users)) %>% 
+  filter(param == 2) %>% 
   mutate(id = factor(id, levels = c(1:10))) %>% 
   ggplot(aes(value, fill = when)) +
   geom_histogram() +
   geom_vline(xintercept = 0, alpha = 0.5) +
-  xlim(c(-1.5, 1.5)) +
-  facet_grid(rows = vars(when), cols = vars(id), scales = "free") +
-  labs(fill = element_blank(), y = element_blank(), x = element_blank()) +
+  scale_x_continuous(breaks = c(-0.25, 0.25)) +
+  # xlim(c(-1.5, 1.5)) +
+  facet_grid(rows = vars(when), cols = vars(player), scales = "free") +
+  labs(fill = element_blank(), y = element_blank(), 
+       # title = "Individual Winner Effects, Selected 1700-1900 Bullet Players",
+       x = element_blank()) +
   theme(axis.ticks.y = element_blank(),
-        axis.text.y = element_blank())
+        axis.text.y = element_blank(),
+        axis.text = element_text(size = axis_text_size - 4),
+        axis.title = element_text(size = axis_title),
+        legend.text = element_text(size = legend_text),
+        strip.text = element_text(size = axis_title - 6),
+        legend.position = "none",
+        plot.title = element_text(size = title_size))
 
 
-## some of these seem to vary from beginning to the end, slightly
+winner_effect_plot
+
+ggsave(filename = paste0(save_path, "indiv_winner_first_last_bullet.png"),
+       winner_effect_plot,
+       width = 9, height = 6, dpi = 600)
 
 
-
-## then some posterior predictive checking for both before and 
-## after
-
+## then posterior predictive checking for both before and after
 fit_samples <- as_draws_df(fit3_first$draws())
 
 
@@ -337,31 +333,44 @@ orig_data <- tibble(outcome = stan_data_ave_first$y,
 
 orig_games_won <- orig_data %>% 
   group_by(focal_id) %>% 
-  summarise(games_won = sum(outcome))
+  summarise(games_won = sum(outcome)) %>% 
+  mutate(focal_id = as.character(focal_id)) %>% 
+  left_join(player_id, by = c("focal_id" = "id"))
 
 
 p1 <- games_won %>% 
+  mutate(focal_id = as.character(focal_id)) %>% 
+  left_join(player_id, by = c("focal_id" = "id")) %>% 
   ggplot(aes(x = games_won)) +
   geom_histogram() +
-  facet_wrap(~focal_id, scales = "free", ncol = 5) +
+  facet_wrap(~player, scales = "free", ncol = 5) +
   geom_vline(data = orig_games_won, 
              mapping = aes(xintercept = games_won), col = "red") +
-  labs(title = "First Games")
+  scale_x_continuous(breaks = c(450, 500, 550)) +
+  # labs(title = "Posterior Predictive Distribution, Initial Games",
+  labs(y = element_blank(),
+       x = "Number of Games Won") +
+  theme(axis.text = element_text(size = axis_text_size - 2),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(size = title_size),
+        axis.title = element_text(size = axis_title),
+        legend.text = element_text(size = legend_text),
+        strip.text = element_text(size = axis_title - 6))
 
 p1
 
+ggsave(filename = paste0(save_path, "ppc_first_bullet.png"),
+       p1,
+       width = 7, height = 5, dpi = 600)
+
+
 
 ## repeat for last games
-
 fit_samples <- as_draws_df(fit3_last$draws())
-
-
 fit_samp <- fit_samples %>% 
   select(!starts_with(c("log_lik", "yrep")))
-
-
 y_rep <- fit_samples %>% select(starts_with("y_rep"))
-
 rm(fit_samples)
 rm(fit_samp)
 
@@ -386,53 +395,40 @@ orig_data <- tibble(outcome = stan_data_ave_last$y,
 
 orig_games_won <- orig_data %>% 
   group_by(focal_id) %>% 
-  summarise(games_won = sum(outcome))
+  summarise(games_won = sum(outcome)) %>% 
+  mutate(focal_id = as.character(focal_id)) %>% 
+  left_join(player_id, by = c("focal_id" = "id"))
 
 p2 <- games_won %>% 
+  mutate(focal_id = as.character(focal_id)) %>% 
+  left_join(player_id, by = c("focal_id" = "id")) %>% 
   ggplot(aes(x = games_won)) +
   geom_histogram() +
-  facet_wrap(~focal_id, scales = "free", ncol = 5) +
+  facet_wrap(~player, scales = "free", ncol = 5) +
   geom_vline(data = orig_games_won, 
              mapping = aes(xintercept = games_won), col = "red") +
-  labs(title = "Last Games",
-       subtitle = "TEMP PLOT")
+  labs(x = "Number of Games Won", y = element_blank()) +
+  scale_x_continuous(breaks = c(450, 500, 550)) +
+  theme(axis.text = element_text(size = axis_text_size - 2),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(size = title_size),
+        axis.title = element_text(size = axis_title),
+        legend.text = element_text(size = legend_text),
+        strip.text = element_text(size = axis_title - 6))
 
 p2
 
 
-ggsave(filename = here("owen/Write Ups/figures/17-19_last_ppc.png"),
-       p2, dpi = 600, height = 5, width = 7)
+ggsave(filename = paste0(save_path, "ppc_last_bullet.png"),
+       p2,
+       width = 7, height = 5, dpi = 600)
 
 
 
-## then save all this output and the plots
-
-fit3_first$save_object(file = here(save_path, "blitz_first_games_n1.RDS"))
-fit3_last$save_object(file = here(save_path, "blitz_last_games_n1.RDS"))
-
-ggsave(plot = global_winner,
-       filename = paste0(save_path, "/global_winner_first_last_blitz_n1.png"),
-       width = 8, height = 8, units = "in")
-
-ggsave(plot = winner_effect_plot,
-       filename = paste0(save_path, "/indiv_winner_first_last_blitz_n1.png"),
-       width = 12, height = 8, units = "in")
-
-ggsave(plot = p1,
-       filename = paste0(save_path, "/ppc_first_blitz_n1.png"),
-       width = 12, height = 8, units = "in")
-
-ggsave(plot = p2,
-       filename = paste0(save_path, "/ppc_last_blitz_n1.png"),
-       width = 12, height = 8, units = "in")
 
 
-##############
-##############
-##############
-
-
-
+##########################################
 ## try to sample for the last data, using the model fitted for the
 ## first instead
 
@@ -449,10 +445,6 @@ draws <- fit3_first$draws() %>% as_draws_df() %>%
   rename(beta1 = `1`, beta2 = `2`)
 
 
-# draws_gamma <- fit3_first$draws() %>% as_draws_df() %>%
-#   select(starts_with(c("gamma"))) %>%
-#   mutate(draw = row_number()) 
-
 future_games <- tibble(focal = as.character(stan_data_ave_last$id), 
        color = stan_data_ave_last$colour, 
        elo_diff = stan_data_ave_last$elo,
@@ -464,13 +456,11 @@ future_games <- tibble(focal = as.character(stan_data_ave_last$id),
 ## because then can just bind them together relatively easily
 ## then some sort of join with the betas based on the ids matching
 
-## left_join(draws, future_games) based on the id then drop the NAs, maybe?
-## maybe I just need a for loop here?
+## left_join(draws, future_games) based on the id
 
-mix <- left_join(draws %>% filter(draw <= 1000),
+mix <- left_join(draws, #%>% filter(draw <= 1500),
                  future_games, by = join_by("id" == "focal"),
                  relationship = "many-to-many") %>% 
-  # filter(draw == 1) %>% ## testing a smaller sample
   rowwise() %>% 
   mutate(inv_logit = beta1 + beta2 * hist + gamma1 * color + gamma2 * elo_diff,
          prob = exp(inv_logit)/(1 + exp(inv_logit)))
@@ -482,30 +472,43 @@ small_sim <- mix %>%
   group_by(id, draw) %>% 
   summarise(games_won = sum(sim_result))
 
+## save this object in case need to improve the plots
+saveRDS(small_sim, file = paste0(save_path, "ppc_fit_first_last.RDS"))
 
-
-## add in true games*
+## add in true games 
 future_results <- tibble(focal = as.character(stan_data_ave_last$id),
                          result = stan_data_ave_last$y) %>% 
   group_by(focal) %>%
   summarise(total = sum(result)) %>% 
-  rename(id = focal)
+  rename(id = focal) %>% 
+  left_join(player_id, by = "id")
 
-future_results
 
+future_results 
 ## then compare these to the true number of games won
-last_ppc <- ggplot(small_sim, aes(x = games_won)) + 
+last_ppc <- small_sim %>%  
+  left_join(player_id, by = "id") %>% 
+  ggplot(aes(x = games_won)) + 
   geom_histogram() + 
   geom_vline(data = future_results, 
              mapping = aes(xintercept = total), col = "red") +
-  facet_wrap(~id, scales = "free_x") +
+  facet_wrap(~player, scales = "free_x", ncol = 5) +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-  labs(y = element_blank(), x = "Games Won",
-  title = "Posterior Predictive Distribution, Final 1000 Games",
-       subtitle = "From draws to first 1000. TEMP PLOT.")
+  labs(y = element_blank(), x = "Number of Games Won") +
+  scale_x_continuous(breaks = c(450, 500, 550)) +
+  theme(axis.text = element_text(size = axis_text_size - 2),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing.x = unit(1, "lines"),
+        plot.title = element_text(size = title_size),
+        axis.title = element_text(size = axis_title),
+        legend.text = element_text(size = legend_text),
+        strip.text = element_text(size = axis_title - 6))
 
 
-ggsave(filename = here("owen/Write Ups/figures/17-19_fit_first_last_ppc.png"),
+last_ppc
+
+ggsave(filename = paste0(save_path, "ppc_fit_first_last_bullet.png"),
        last_ppc, dpi = 600, height = 5, width = 7)
 
 
