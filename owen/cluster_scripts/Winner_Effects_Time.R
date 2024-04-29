@@ -227,7 +227,6 @@ fit3_last <- mod$sample(data = stan_data_ave_last,
                          refresh = 100)
 
 
-#### up to date down as far as here ####
 
 
 fit3_first$summary()
@@ -395,9 +394,15 @@ p2 <- games_won %>%
   facet_wrap(~focal_id, scales = "free", ncol = 5) +
   geom_vline(data = orig_games_won, 
              mapping = aes(xintercept = games_won), col = "red") +
-  labs(title = "Last Games")
+  labs(title = "Last Games",
+       subtitle = "TEMP PLOT")
 
 p2
+
+
+ggsave(filename = here("owen/Write Ups/figures/17-19_last_ppc.png"),
+       p2, dpi = 600, height = 5, width = 7)
+
 
 
 ## then save all this output and the plots
@@ -426,85 +431,81 @@ ggsave(plot = p2,
 ##############
 ##############
 
-## amount of variability on second half is very constant, 
-## interesting
 
 
-## look at some plots to see the difference
+## try to sample for the last data, using the model fitted for the
+## first instead
 
-# p1 <- mcmc_hist(fit3_first$draws(variables = 
-#                                    c("mu1", "mu2", "gamma1", "gamma2"))) +
-#   labs(title = "Global Parameters First 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-first1000-global.png",
-#        plot = p1,
-#        width = 8, height = 5, dpi = 200)
-# 
-# 
-# p2 <- mcmc_hist(fit3_last$draws(variables = 
-#                                    c("mu1", "mu2", "gamma1", "gamma2"))) +
-#   labs(title = "Global Parameters Last 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-last1000-global.png",
-#        plot = p2,
-#        width = 8, height = 5, dpi = 200)
-# 
-# 
-# ## winner effects
-# 
-# players <- users
-# names(players) <- paste0("beta[", 1:length(users), "]")
-# 
-# player_labels <- as_labeller(players)
-# 
-# p3 <- mcmc_hist(fit3_first$draws(variables = "beta"),
-#   facet_args = list(labeller = player_labels, ncol = 5)) +
-#   labs(title = "Winner Effects First 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-first1000-winner.png",
-#        plot = p3,
-#        width = 8, height = 5, dpi = 200)
-# 
-# p4 <- mcmc_hist(fit3_last$draws(variables = "beta"),
-#                 facet_args = list(labeller = player_labels, ncol = 5)) +
-#   labs(title = "Winner Effects Last 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-last1000-winner.png",
-#        plot = p4,
-#        width = 8, height = 5, dpi = 200)
-# 
-# 
-# ## player effects
-# 
-# players <- users
-# names(players) <- paste0("alpha[", 1:length(users), "]")
-# 
-# player_labels <- as_labeller(players)
-# 
-# p5 <- mcmc_hist(fit3_first$draws(variables = "alpha"),
-#                 facet_args = list(labeller = player_labels, ncol = 5)) +
-#   labs(title = "Indiv Effects First 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-first1000-indiv.png",
-#        plot = p5,
-#        width = 8, height = 5, dpi = 200)
-# 
-# p6 <- mcmc_hist(fit3_last$draws(variables = "alpha"),
-#                 facet_args = list(labeller = player_labels, ncol = 5)) +
-#   labs(title = "Indiv Effects Last 1000 Games Each",
-#        subtitle = "10 players 1700-1900")
-# 
-# ggsave(filename = 
-#          "owen/Write Ups/figures/1700-1900-bullet-last1000-indiv.png",
-#        plot = p6,
-#        width = 8, height = 5, dpi = 200)
+draws <- fit3_first$draws() %>% as_draws_df() %>%
+  select(starts_with(c("beta[", "gamma"))) %>%
+  mutate(draw = row_number()) %>% 
+  pivot_longer(cols = "beta[1,1]":"beta[2,10]") %>% 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) %>% 
+  select(-name) %>% 
+  pivot_wider(names_from = param, values_from = value) %>% 
+  rename(beta1 = `1`, beta2 = `2`)
+
+
+# draws_gamma <- fit3_first$draws() %>% as_draws_df() %>%
+#   select(starts_with(c("gamma"))) %>%
+#   mutate(draw = row_number()) 
+
+future_games <- tibble(focal = as.character(stan_data_ave_last$id), 
+       color = stan_data_ave_last$colour, 
+       elo_diff = stan_data_ave_last$elo,
+       hist = stan_data_ave_last$win_prop)
+
+
+## need to figure out how to combine these together then...
+## maybe it makes sense to get the gamma out separately,
+## because then can just bind them together relatively easily
+## then some sort of join with the betas based on the ids matching
+
+## left_join(draws, future_games) based on the id then drop the NAs, maybe?
+## maybe I just need a for loop here?
+
+mix <- left_join(draws %>% filter(draw <= 1000),
+                 future_games, by = join_by("id" == "focal"),
+                 relationship = "many-to-many") %>% 
+  # filter(draw == 1) %>% ## testing a smaller sample
+  rowwise() %>% 
+  mutate(inv_logit = beta1 + beta2 * hist + gamma1 * color + gamma2 * elo_diff,
+         prob = exp(inv_logit)/(1 + exp(inv_logit)))
+
+
+small_sim <- mix %>% 
+  mutate(sim_result = sample(c(1, 0), size = 1, prob = c(prob, 1 - prob))) %>% 
+  select(id, draw, sim_result) %>% 
+  group_by(id, draw) %>% 
+  summarise(games_won = sum(sim_result))
+
+
+
+## add in true games*
+future_results <- tibble(focal = as.character(stan_data_ave_last$id),
+                         result = stan_data_ave_last$y) %>% 
+  group_by(focal) %>%
+  summarise(total = sum(result)) %>% 
+  rename(id = focal)
+
+future_results
+
+## then compare these to the true number of games won
+last_ppc <- ggplot(small_sim, aes(x = games_won)) + 
+  geom_histogram() + 
+  geom_vline(data = future_results, 
+             mapping = aes(xintercept = total), col = "red") +
+  facet_wrap(~id, scales = "free_x") +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(y = element_blank(), x = "Games Won",
+  title = "Posterior Predictive Distribution, Final 1000 Games",
+       subtitle = "From draws to first 1000. TEMP PLOT.")
+
+
+ggsave(filename = here("owen/Write Ups/figures/17-19_fit_first_last_ppc.png"),
+       last_ppc, dpi = 600, height = 5, width = 7)
+
+
