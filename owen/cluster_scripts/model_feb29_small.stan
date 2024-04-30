@@ -50,10 +50,9 @@ model {
   sigma_g2 ~ inv_gamma(1, 1);          // prior for sd of gamma2
   gamma1 ~ normal(0, sigma_g1);        // prior for gamma1
   gamma2 ~ normal(0, sigma_g2);        // prior for gamma2
-  sigma_1 ~ inv_gamma(1, 1);
+  sigma_1 ~ inv_gamma(1, 1);           // prior for sd of mu_beta
   nu[1] ~ normal(0, 1);
   nu[2] ~ normal(mu_beta, 1);          // standardized so sds here fixed
-  mu_beta ~ normal(0, 1);              // hyperprior for mu_beta
   tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
   L_Omega ~ lkj_corr_cholesky(2);      // prior for correlation matrix
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
