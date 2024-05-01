@@ -54,10 +54,13 @@ files <- list.files(data_path)
 lichess_data <- files %>% 
   map_dfr(~read_player(data_path, .x))
 
-
+print("------------")
+print(dim(lichess_data))
+print("------------")
 
 ## restrict to rated blitz and shorter here
 ## this also removes the NAs, which makes sense
+
 
 small_data <- lichess_data %>%
   filter(TimeControl == "60+0") %>%
@@ -499,7 +502,7 @@ last_ppc <- small_sim %>%
   facet_wrap(~player, scales = "free_x", ncol = 5) +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   labs(y = element_blank(), x = "Number of Games Won") +
-  scale_x_continuous(breaks = c(450, 500, 550)) +
+  # scale_x_continuous(breaks = c(450, 500, 550)) +
   theme(axis.text = element_text(size = axis_text_size - 2),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
