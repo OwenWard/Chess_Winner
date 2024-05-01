@@ -27,11 +27,12 @@ path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 ### load in the data to use
 
 ## rerun for 2000-2200 next
-all_data_path <- rep(NA, 3)
-all_save_path <- rep(NA, 3)
+all_data_path <- rep(NA, 4)
+all_save_path <- rep(NA, 4)
 all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
+all_data_path[4] <- here("box_data/lichessGrandmasters/")
 all_save_path[1] <- here("results/lichess1700-1900_mar/")
 
 # all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
@@ -39,6 +40,7 @@ all_save_path[1] <- here("results/lichess1700-1900_mar/")
 
 all_save_path[2] <- here("results/lichess2000-2200_mar/")
 all_save_path[3] <- here("results/lichess2300-2500_mar/")
+all_data_path[4] <- here("box_data/lichessGrandmasters_mar/")
 
 
 data_path <- all_data_path[path_id]
@@ -68,6 +70,7 @@ small_data <- lichess_data %>%
 #   filter(Variant == "Standard") %>%
 #   filter(grepl("Rated Blitz game", Event))
 
+rm(lichess_data)
 
 ## then identify data for start and finish
 
@@ -94,6 +97,7 @@ last_games <- small_data %>%
   ungroup()
 
 
+rm(small_data)
 users <- select_users
 
 ## save the users chosen for this
@@ -192,8 +196,8 @@ fit3_last <- mod$sample(data = stan_data_ave_last,
 fit3_last$save_object(file = here(save_path, "select_users_last_bullet.RDS"))
 
 
-fit3_first$summary()
-fit3_last$summary()
+# fit3_first$summary()
+# fit3_last$summary()
 
 
 ## plot these histograms together, from first and last side by side
@@ -458,7 +462,7 @@ future_games <- tibble(focal = as.character(stan_data_ave_last$id),
 
 ## left_join(draws, future_games) based on the id
 
-mix <- left_join(draws, #%>% filter(draw <= 1500),
+mix <- left_join(draws %>% filter(draw <= 1000),
                  future_games, by = join_by("id" == "focal"),
                  relationship = "many-to-many") %>% 
   rowwise() %>% 

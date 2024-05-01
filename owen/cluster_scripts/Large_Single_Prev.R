@@ -18,7 +18,7 @@ library(here)
 
 options(mc.cores = parallel::detectCores())
 
-theme_set(theme_bw())
+source(here("analysis/helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
@@ -26,14 +26,16 @@ path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 ### load in the data to use
 
 ## rerun for 2000-2200 next
-all_data_path <- rep(NA, 3)
-all_save_path <- rep(NA, 3)
+all_data_path <- rep(NA, 4)
+all_save_path <- rep(NA, 4)
 all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
+all_data_path[4] <- here("box_data/lichessGrandmasters/")
 all_save_path[1] <- here("results/lichess1700-1900_mar/")
 all_save_path[2] <- here("results/lichess2000-2200_mar/")
 all_save_path[3] <- here("results/lichess2300-2500_mar/")
+all_save_path[4] <- here("results/lichessGrandmasters_mar/")
 
 
 data_path <- all_data_path[path_id]
@@ -46,39 +48,6 @@ files <- list.files(data_path)
 
 ## need to write a function to process them separately then I think
 
-read_player <- function(path, file){
-  dat <- read_csv(file = paste0(data_path, file),
-                  col_types = cols(UTCDate = col_date("%Y.%m.%d"),
-                                   WhiteTitle = col_character(),
-                                   BlackTitle = col_character(),
-                                   WhiteElo = col_character(),
-                                   BlackElo = col_character(),
-                                   FEN = col_character())) %>% 
-    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
-           WhiteElo, BlackElo, Variant, TimeControl, Termination) %>% 
-    mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
-           BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))
-  dat
-}
-
-get_hist <- function(user, games, prev_n) {
-  hist_games <- games %>% 
-    filter(White == user | Black == user) %>% 
-    arrange(UTCDate, UTCTime) %>% 
-    mutate(focal_white = ifelse(Username == White, 1, 0)) %>% 
-    select(White:BlackElo, focal_white) %>% 
-    mutate(focal_result = case_when(
-      (focal_white == 1 & Result == "1-0") ~ 1,
-      (focal_white == 0 & Result == "0-1") ~ 1,
-      (Result == "1/2-1/2") ~ 0.5,
-      .default = 0
-    )) %>% 
-    mutate(focal_win_prop = c(cumsum(focal_result[1:(prev_n - 1)])/(1:(prev_n -1)), 
-                              roll_mean(focal_result, n = prev_n)))
-  
-  hist_games
-}
-
 
 lichess_data <- files %>% 
   map_dfr(~read_player(data_path, .x))
@@ -89,17 +58,17 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-# small_data <- lichess_data %>%
-#   # filter(Event == "Rated Bullet game") %>%
-#   filter(TimeControl == "60+0") %>%
-#   filter(Variant == "Standard") %>%
-#   filter(grepl("Rated Bullet game", Event))
-# # 
 small_data <- lichess_data %>%
   # filter(Event == "Rated Bullet game") %>%
-  filter(TimeControl == "180+0") %>%
+  filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
-  filter(grepl("Rated Blitz game", Event))
+  filter(grepl("Rated Bullet game", Event))
+ 
+# small_data <- lichess_data %>%
+#   # filter(Event == "Rated Bullet game") %>%
+#   filter(TimeControl == "180+0") %>%
+#   filter(Variant == "Standard") %>%
+#   filter(grepl("Rated Blitz game", Event))
 
 users <- unique(small_data$Username)
 
@@ -170,8 +139,8 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 
 ## save the stan fit as not actually that large here
 
-# fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model_prev.RDS"))
-fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
+fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model_prev.RDS"))
+# fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model_prev.RDS"))
 
 ## create some summary plots of these results
 
@@ -193,12 +162,12 @@ mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2",
                            "sigma_g1", "sigma_g2")),
           facet_args = list(scales = "free"))
 
-# ggsave(filename = paste0(save_path,
-#                          "/global_pars_all_rated_bullet_model_prev.png"),
-#                          width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/global_pars_all_rated_blitz_model_prev.png"),
-       width = 8, height = 8, units = "in")
+                         "/global_pars_all_rated_bullet_model_prev.png"),
+                         width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/global_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
 
 theme_set(bayesplot_theme_get())
 
@@ -212,12 +181,12 @@ random_effect_post %>%
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
-# ggsave(filename = paste0(save_path,
-#                          "/winner_pars_all_rated_bullet_model_prev.png"),
-#        width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/winner_pars_all_rated_blitz_model_prev.png"),
+                         "/winner_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/winner_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
 
 random_effect_post %>% 
   filter(param == 1) %>% 
@@ -228,9 +197,9 @@ random_effect_post %>%
   labs(title = "Individual Player Effects")
 
 
-# ggsave(filename = paste0(save_path,
-#                          "/indiv_pars_all_rated_bullet_model_prev.png"),
-#        width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/indiv_pars_all_rated_blitz_model_prev.png"),
+                         "/indiv_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/indiv_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
