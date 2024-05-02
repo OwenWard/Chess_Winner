@@ -40,7 +40,7 @@ all_save_path[1] <- here("results/lichess1700-1900_mar/")
 
 all_save_path[2] <- here("results/lichess2000-2200_mar/")
 all_save_path[3] <- here("results/lichess2300-2500_mar/")
-all_data_path[4] <- here("box_data/lichessGrandmasters_mar/")
+all_save_path[4] <- here("box_data/lichessGrandmasters_mar/")
 
 
 data_path <- all_data_path[path_id]
