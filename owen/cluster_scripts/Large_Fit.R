@@ -62,18 +62,18 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-small_data <- lichess_data %>%
-  # filter(Event == "Rated Bullet game") %>%
-  filter(TimeControl == "60+0") %>%
-  filter(Variant == "Standard") %>%
-  filter(grepl("Rated Bullet game", Event))
-
-## what time length should be
 # small_data <- lichess_data %>%
 #   # filter(Event == "Rated Bullet game") %>%
-#   filter(TimeControl == "180+0") %>%
+#   filter(TimeControl == "60+0") %>%
 #   filter(Variant == "Standard") %>%
-#   filter(grepl("Rated Blitz game", Event))
+#   filter(grepl("Rated Bullet game", Event))
+
+## what time length should be
+small_data <- lichess_data %>%
+  # filter(Event == "Rated Bullet game") %>%
+  filter(TimeControl == "180+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("Rated Blitz game", Event))
 
 users <- unique(small_data$Username)
 
@@ -161,10 +161,10 @@ mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2",
                            "sigma_g1", "sigma_g2")),
           facet_args = list(scales = "free"))
 
-ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
-                         width = 8, height = 8, units = "in")
-# ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model.png"),
-#        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
+#                          width = 8, height = 8, units = "in")
+ggsave(filename = paste0(save_path, "/global_pars_all_rated_blitz_model.png"),
+       width = 8, height = 8, units = "in")
 
 theme_set(bayesplot_theme_get())
 
@@ -182,10 +182,10 @@ random_effect_post %>%
 # mcmc_hist(fit3_ave$draws("beta"),
 #           facet_args = list(labeller = player_labels))
 
-ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
-       width = 8, height = 8, units = "in")
-# ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model.png"),
+# ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
 #        width = 8, height = 8, units = "in")
+ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model.png"),
+       width = 8, height = 8, units = "in")
 
 
 random_effect_post %>%
@@ -196,7 +196,7 @@ random_effect_post %>%
              labeller = player_labels, ncol = 5) +
   labs(title = "Individual Player Effects")
 
-ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model.png"),
-       width = 8, height = 8, units = "in")
-# ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model.png"),
+# ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_bullet_model.png"),
 #        width = 8, height = 8, units = "in")
+ggsave(filename = paste0(save_path, "/indiv_pars_all_rated_blitz_model.png"),
+       width = 8, height = 8, units = "in")
