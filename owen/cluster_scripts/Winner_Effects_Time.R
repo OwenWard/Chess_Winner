@@ -63,9 +63,10 @@ print("------------")
 
 
 small_data <- lichess_data %>%
+  mutate(Event = tolower(Event)) |> 
   filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
-  filter(grepl("Rated Bullet game", Event))
+  filter(grepl("rated bullet game", Event))
 # 
 # small_data <- lichess_data %>%
 #   # filter(Event == "Rated Bullet game") %>%
