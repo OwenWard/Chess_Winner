@@ -141,6 +141,8 @@ stan_data_ave_first <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
+saveRDS(stan_data_ave_first, file = here(save_path, "stan_data_first.RDS"))
+
 stan_file <- here("owen", "cluster_scripts", "model_feb29_small.stan")
 
 mod <- cmdstan_model(stan_file)
@@ -190,6 +192,7 @@ stan_data_ave_last <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
+saveRDS(stan_data_ave_last, file = here(save_path, "stan_data_last.RDS"))
 
 fit3_last <- mod$sample(data = stan_data_ave_last,
                          seed = 123,

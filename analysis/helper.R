@@ -52,7 +52,7 @@ get_hist <- function(user, games, prev_n) {
 
 ## plotting defaults
 ## setup for the plots
-# theme_set(theme_bw())
+theme_set(theme_bw())
 axis_title <- 16
 title_size <- 18
 axis_text_size <- 14
