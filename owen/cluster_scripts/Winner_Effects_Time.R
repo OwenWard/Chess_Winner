@@ -469,7 +469,7 @@ future_games <- tibble(focal = as.character(stan_data_ave_last$id),
 
 ## left_join(draws, future_games) based on the id
 
-mix <- left_join(draws %>% filter(draw <= 1000),
+mix <- left_join(draws, #%>% filter(draw <= 1000),
                  future_games, by = join_by("id" == "focal"),
                  relationship = "many-to-many") %>% 
   rowwise() %>% 
