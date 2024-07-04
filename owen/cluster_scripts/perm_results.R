@@ -65,7 +65,7 @@ select_users <- small_data %>%
   tally() %>% 
   arrange(-n) %>% 
   ## will change this to n = 20 when run on cluster potentially
-  slice_max(order = n, n = 10) %>% 
+  slice_max(order = n, n = 20) %>% 
   pull(Username)
 
 
