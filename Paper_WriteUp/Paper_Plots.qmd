@@ -87,6 +87,14 @@ lichess_data |>
   ungroup() |> 
   mutate(prop = n/sum(n))
 
+lichess_data |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
 
 bullet_data <- lichess_data |> 
   mutate(Event = tolower(Event)) |>
@@ -109,6 +117,14 @@ bullet_data |>
   count() |> 
   arrange(n)
 
+blitz_data <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "180+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("rated blitz game", Event))
+
+
+
 ## then repeat this sort of analysis for the gms
 
 path_id <- 4  ## for GMs
@@ -125,6 +141,15 @@ lichess_data_gm <- files %>%
 lichess_data_gm |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated bullet game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
   group_by(TimeControl) |> 
   count() |> 
   arrange(-n) |> 
@@ -149,10 +174,36 @@ bullet_data_gm |>
 bullet_data_gm |> 
   group_by(Username) |> 
   count() |> 
-  arrange(n) |> 
   ungroup() |> 
   summarise(mean(n))
 
+blitz_data_gm <- lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "180+0") %>%
+  filter(Variant == "Standard") %>%
+  filter(grepl("rated blitz game", Event))
+
+
+blitz_data_gm |> 
+  group_by(Username) |> 
+  count() |> 
+  ungroup() |> 
+  summarise(mean(n))
+
+
+
+## get the average rating of the GMs 
+
+lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(Username) |> 
+  arrange(UTCDate, UTCTime) |> 
+  slice_tail(n = 1) |> 
+  mutate(user_elo = ifelse(Username == White, WhiteElo, BlackElo)) |> 
+  select(Username, White, Black, WhiteElo, BlackElo, user_elo) |>
+  ungroup() |> 
+  summarise(mean(user_elo))
 
 ```
 
@@ -432,7 +483,7 @@ hist_comp_global
 ggsave(plot = hist_comp_global, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "gm_comp_global.png")), dpi = 600,
-       height = 5, width = 7)
+       height = 4, width = 7)
 
 
 ## then compare the winner effects and individual effects. 
@@ -689,7 +740,7 @@ bul_blit_gm_comp_global
 ggsave(plot = bul_blit_gm_comp_global, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "bul_blitz_comp_gm_global.png")), dpi = 600,
-       height = 5, width = 7)
+       height = 4, width = 7)
 
 
 ## then repeat for winner and player effects

@@ -1,3 +1,8 @@
+#### July 2024 
+## Collection of helper functions for processing data
+##
+
+
 read_player <- function(path, file){
   dat <- read_csv(file = paste0(path, file),
                   col_types = cols(UTCDate = col_date("%Y.%m.%d"),
