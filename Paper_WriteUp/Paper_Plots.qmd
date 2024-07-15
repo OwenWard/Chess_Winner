@@ -60,10 +60,7 @@ Construct these only for the 1700-1900 players and GMs initially.
 
 ```{r}
 
-
-
-
-path_id <- 1  ## for 1700-1900
+path_id <- 1  ## for 1700-1900 
 
 data_path <- all_data_path[path_id]
 
@@ -116,6 +113,19 @@ bullet_data |>
   group_by(Username) |> 
   count() |> 
   arrange(n)
+
+ bullet_data |>  group_by(Username) |> 
+  select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_3 = ifelse(gap_seconds <= 180, TRUE, FALSE)) |> 
+  ungroup() |>   ## to get the overall proportion
+  summarise(sum(less_3, na.rm = TRUE)/ n()) |> 
+  print(n = 25)
+
 
 blitz_data <- lichess_data |> 
   mutate(Event = tolower(Event)) |>
@@ -204,6 +214,85 @@ lichess_data_gm |>
   select(Username, White, Black, WhiteElo, BlackElo, user_elo) |>
   ungroup() |> 
   summarise(mean(user_elo))
+
+
+## look at the proportion of games started within 3 minutes 
+## of the previous game
+bullet_data_gm |> 
+  # group_by(Username) |> 
+  select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_3 = ifelse(gap_seconds <= 180, TRUE, FALSE)) |> 
+  ungroup() |>   ## to get the overall proportion
+  summarise(sum(less_3, na.rm = TRUE)/ n()) |> 
+  print(n = 25)
+
+
+## look at the streaks, number of games played in a session
+outcomes <- bullet_data_gm |> 
+  # group_by(Username) |> 
+  select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_3 = if_else(gap_seconds <= 180, TRUE, FALSE, FALSE)) 
+
+
+
+get_true_sequences <- function(x) {
+  rle_x <- rle(x)
+  true_lengths <- rle_x$lengths[rle_x$values == TRUE]
+  return(true_lengths)
+}
+
+# Apply function to each group
+result <- outcomes %>%
+  # group_by(group) %>%
+  summarise(session_length = list(get_true_sequences(less_3)))
+
+result |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+result |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |> 
+  # group_by(Username) |> 
+  summarise(sum(multiple)/n())
+
+outcomes_blitz <- blitz_data_gm |> 
+  # group_by(Username) |> 
+  select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_7_min = if_else(gap_seconds <= 420, TRUE, FALSE, FALSE)) 
+
+
+# Apply function to each group
+result_blitz <- outcomes_blitz %>%
+  # group_by(group) %>%
+  summarise(session_length = list(get_true_sequences(less_7_min)))
+
+result_blitz |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+result_blitz |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |> 
+  # group_by(Username) |> 
+  summarise(sum(multiple)/n())
 
 ```
 
