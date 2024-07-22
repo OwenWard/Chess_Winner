@@ -413,6 +413,40 @@ ggsave(plot = indiv_plot_17_19,
 ```
 
 
+## 2000-2200 Previous Game
+
+```{r}
+
+data_path <- here("results/lichess2000-2200_mar")
+
+fit_20_22_bullet_prev <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
+
+
+fit_20_22_bullet_prev$summary(variables = c("mu_beta",
+                                            "gamma1", "gamma2",
+                                            "sigma_1", "tau[1]", "tau[2]",
+                                            "sigma_g1", "sigma_g2"))
+```
+
+
+## 2300-2500 Previous Game
+
+```{r}
+
+data_path <- here("results/lichess2300-2500_mar")
+
+fit_23_25_bullet_prev <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
+
+
+fit_23_25_bullet_prev$summary(variables = c("mu_beta",
+                                            "gamma1", "gamma2",
+                                            "sigma_1", "tau[1]", "tau[2]",
+                                            "sigma_g1", "sigma_g2"))
+```
+
+
 ## GM previous game
 
 
