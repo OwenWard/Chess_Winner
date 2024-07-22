@@ -9,8 +9,9 @@ format:
   pdf
 ---
 
-
-This will provide the final figures used in the paper.
+This document will recreate all numeric and graphical
+summaries contained in the submitted manuscript and the 
+supplementary materials.
 
 ```{r setup}
 #| include: false
@@ -45,10 +46,10 @@ all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
 
 res_data_path <- rep(NA, 4)
-res_data_path[1] <- here("results/lichess1700-1900_mar/")
-res_data_path[2] <- here("results/lichess2000-2200_mar/")
-res_data_path[3] <- here("results/lichess2300-2500_mar/")
-res_data_path[4] <- here("results/lichessGrandmasters_mar/")
+res_data_path[1] <- here("results/lichess1700-1900/")
+res_data_path[2] <- here("results/lichess2000-2200/")
+res_data_path[3] <- here("results/lichess2300-2500/")
+res_data_path[4] <- here("results/lichessGrandmasters/")
 
 ```
 
@@ -307,7 +308,7 @@ result_blitz |>
 
 ```{r}
 
-data_path <- here("results/lichess1700-1900_mar")
+data_path <- here("results/lichess1700-1900")
 
 fit_17_19_bullet_prev <- readRDS(file = 
                                    paste0(data_path,
@@ -417,7 +418,7 @@ ggsave(plot = indiv_plot_17_19,
 
 ```{r}
 
-data_path <- here("results/lichess2000-2200_mar")
+data_path <- here("results/lichess2000-2200")
 
 fit_20_22_bullet_prev <- 
   readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
@@ -434,7 +435,7 @@ fit_20_22_bullet_prev$summary(variables = c("mu_beta",
 
 ```{r}
 
-data_path <- here("results/lichess2300-2500_mar")
+data_path <- here("results/lichess2300-2500")
 
 fit_23_25_bullet_prev <- 
   readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
@@ -453,7 +454,7 @@ fit_23_25_bullet_prev$summary(variables = c("mu_beta",
 ### Global Parameters
 
 ```{r}
-data_path <- here("results/lichessGrandmasters_mar")
+data_path <- here("results/lichessGrandmasters")
 
 fit_gm_bullet_prev <- 
   readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
@@ -569,7 +570,7 @@ updated currently.
 
 ## global effects first
 
-data_path <- here("results/lichessGrandmasters_mar")
+data_path <- here("results/lichessGrandmasters")
 
 fit_gm_bullet_10 <- 
   readRDS(file =paste0(data_path,"/all_rated_bullet_model.RDS"))
@@ -689,7 +690,7 @@ previous game only.
 
 ```{r}
 
-data_path <- here("results/lichess1700-1900_mar")
+data_path <- here("results/lichess1700-1900")
 
 fit_17_19_bullet_prev <- readRDS(file = paste0(data_path,
                                               "/all_rated_bullet_model_prev.RDS"))
@@ -815,7 +816,7 @@ ggsave(plot = comp_17_19_player,
 
 
 ```{r}
-data_path <- here("results/lichessGrandmasters_mar")
+data_path <- here("results/lichessGrandmasters")
 
 fit_gm_bullet_prev <- readRDS(file = paste0(data_path,
                                               "/all_rated_bullet_model_prev.RDS"))
@@ -1192,7 +1193,7 @@ Here we use the 20 players with the most games only.
 
 ## these don't look right just now
 
-perm_data_path <- here("results/lichess1700-1900_mar/perm")
+perm_data_path <- here("results/lichess1700-1900/perm")
 
 path_id <- 1
 data_path <- res_data_path[path_id]
@@ -1475,10 +1476,10 @@ What about for the other two groups?
 
 __To be added in__
 
-![Time-Varying PPC for 2000-2200](../results/lichess2000-2200_mar/time/ppc_fit_first_last_bullet.png)
+![Time-Varying PPC for 2000-2200](../results/lichess2000-2200/time/ppc_fit_first_last_bullet.png)
 
 
-![Time-Varying PPC for 2300-2500](../results/lichess2300-2500_mar/time/ppc_fit_first_last_bullet.png)
+![Time-Varying PPC for 2300-2500](../results/lichess2300-2500/time/ppc_fit_first_last_bullet.png)
 
 
 Maybe some very limited evidence that this becomes less
@@ -1488,7 +1489,7 @@ reasonable for players with a higher rating.
 
 
 ```{r}
-perm_data_path <- here("results/lichessGrandmasters_mar/perm/")
+perm_data_path <- here("results/lichessGrandmasters/perm/")
 
 ## read all the files in this directory
 perm_files <- list.files(perm_data_path)
