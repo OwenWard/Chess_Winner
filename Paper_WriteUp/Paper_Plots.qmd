@@ -54,12 +54,14 @@ res_data_path[4] <- here("results/lichessGrandmasters/")
 ```
 
 
-# Summary Statistics 
+# Section 2: Data 
 
-First get some summary statistics about the overall data. 
-Construct these only for the 1700-1900 players and GMs initially.
+We first get some summary statistics about the overall data. 
+We construct these for the 1700-1900 players and GMs.
+We then examine the number of consecutive games played 
+across both cohorts.
 
-```{r}
+```{r summary statistics 1700-1900}
 
 path_id <- 1  ## for 1700-1900 
 
@@ -70,12 +72,13 @@ files <- list.files(data_path)
 lichess_data <- files %>% 
   map_dfr(~read_player(data_path, .x))
 
-
+## overall summary of all event types
 lichess_data |> 
   group_by(Event) |> 
   count() |> 
   arrange(-n)
 
+## what proportion of bullet games are of what time format
 lichess_data |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated bullet game", Event)) |> 
@@ -85,6 +88,7 @@ lichess_data |>
   ungroup() |> 
   mutate(prop = n/sum(n))
 
+## repeat for blitz games instead
 lichess_data |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated blitz game", Event)) |> 
@@ -102,30 +106,33 @@ bullet_data <- lichess_data |>
 
 bullet_data |> nrow()
 
+
+## average number, we remove the two accounts with 1 and 3 games only
+## throughout we do not consider those who play less than 10 games
+## at a given format when fitting any model
 bullet_data |> 
   group_by(Username) |> 
   count() |> 
-  filter(n > 3) |> 
+  filter(n > 3) |>
   ungroup() |> 
   summarise(avg = mean(n))
 
 
-bullet_data |> 
-  group_by(Username) |> 
-  count() |> 
-  arrange(n)
 
- bullet_data |>  group_by(Username) |> 
-  select(Username, UTCDate, UTCTime) |> 
-  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
-  group_by(Username) |> 
-  arrange(date_time) |> 
-  mutate(gap = date_time - lag(date_time),
+## for each player, count how many times they start
+## a game with 3 minutes of the start of a previous game
+## and get the proportion across all focal players
+ bullet_data |>  
+   group_by(Username) |> 
+   select(Username, UTCDate, UTCTime) |> 
+   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+   group_by(Username) |> 
+   arrange(date_time) |> 
+   mutate(gap = date_time - lag(date_time),
          gap_seconds = as.numeric(gap)) |> 
-  mutate(less_3 = ifelse(gap_seconds <= 180, TRUE, FALSE)) |> 
-  ungroup() |>   ## to get the overall proportion
-  summarise(sum(less_3, na.rm = TRUE)/ n()) |> 
-  print(n = 25)
+   mutate(less_3 = ifelse(gap_seconds <= 180, TRUE, FALSE)) |> 
+   ungroup() |>   ## to get the overall proportion
+   summarise(sum(less_3, na.rm = TRUE)/ n()) 
 
 
 blitz_data <- lichess_data |> 
@@ -135,20 +142,68 @@ blitz_data <- lichess_data |>
   filter(grepl("rated blitz game", Event))
 
 
+## repeat for blitz data using 7 minutes as the maximum gap
+ blitz_data |>  
+   group_by(Username) |> 
+   select(Username, UTCDate, UTCTime) |> 
+   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+   group_by(Username) |> 
+   arrange(date_time) |> 
+   mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+   mutate(less_7 = ifelse(gap_seconds <= 420, TRUE, FALSE)) |> 
+   ungroup() |>   ## to get the overall proportion
+   summarise(sum(less_7, na.rm = TRUE)/ n()) 
 
-## then repeat this sort of analysis for the gms
+ 
 
+## examine how many games are played in a session for the bullet data
+## look at the streaks, number of games played in a session
+outcomes <- bullet_data |> 
+  # group_by(Username) |> 
+  select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_3 = if_else(gap_seconds <= 180, TRUE, FALSE, missing = FALSE)) 
+
+# Apply function to each group
+result <- outcomes |> 
+  summarise(session_length = list(get_true_sequences(less_3)))
+
+result |> 
+  unnest_longer(session_length) |> 
+  summarise(med_session = median(session_length), 
+            avg = mean(session_length))
+
+## plot the histogram of games per session
+result |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+
+## proportion of sessions with more than 1 game
+result |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+```
+
+
+```{r summary statistics gm}
+## then repeat this analysis for the gms
 path_id <- 4  ## for GMs
-
 data_path <- all_data_path[path_id]
-
 files <- list.files(data_path)
 
 lichess_data_gm <- files %>% 
   map_dfr(~read_player(data_path, .x))
 
-
-
+## get proportion of bullet games that are of each time format
 lichess_data_gm |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated bullet game", Event)) |> 
@@ -158,6 +213,7 @@ lichess_data_gm |>
   ungroup() |> 
   mutate(prop = n/sum(n))
 
+## repeat for blitz
 lichess_data_gm |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated blitz game", Event)) |> 
@@ -175,13 +231,7 @@ bullet_data_gm <- lichess_data_gm |>
 
 bullet_data_gm |> nrow()
 
-bullet_data_gm |> 
-  group_by(Username) |> 
-  count() |> 
-  arrange(n) 
-
-
-
+## average across all focal players
 bullet_data_gm |> 
   group_by(Username) |> 
   count() |> 
@@ -194,7 +244,6 @@ blitz_data_gm <- lichess_data_gm |>
   filter(Variant == "Standard") %>%
   filter(grepl("rated blitz game", Event))
 
-
 blitz_data_gm |> 
   group_by(Username) |> 
   count() |> 
@@ -202,9 +251,8 @@ blitz_data_gm |>
   summarise(mean(n))
 
 
-
-## get the average rating of the GMs 
-
+## get the average rating of the GMs at the time data
+## was collected 
 lichess_data_gm |> 
   mutate(Event = tolower(Event)) |> 
   filter(grepl("rated blitz game", Event)) |> 
@@ -220,7 +268,6 @@ lichess_data_gm |>
 ## look at the proportion of games started within 3 minutes 
 ## of the previous game
 bullet_data_gm |> 
-  # group_by(Username) |> 
   select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
@@ -229,12 +276,11 @@ bullet_data_gm |>
          gap_seconds = as.numeric(gap)) |> 
   mutate(less_3 = ifelse(gap_seconds <= 180, TRUE, FALSE)) |> 
   ungroup() |>   ## to get the overall proportion
-  summarise(sum(less_3, na.rm = TRUE)/ n()) |> 
-  print(n = 25)
+  summarise(sum(less_3, na.rm = TRUE)/ n()) 
 
 
 ## look at the streaks, number of games played in a session
-outcomes <- bullet_data_gm |> 
+outcomes_gm <- bullet_data_gm |> 
   # group_by(Username) |> 
   select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
@@ -242,10 +288,9 @@ outcomes <- bullet_data_gm |>
   arrange(date_time) |> 
   mutate(gap = date_time - lag(date_time),
          gap_seconds = as.numeric(gap)) |> 
-  mutate(less_3 = if_else(gap_seconds <= 180, TRUE, FALSE, FALSE)) 
+  mutate(less_3 = if_else(gap_seconds <= 180, TRUE, FALSE, missing = FALSE)) 
 
-
-
+## extract the sessions containing more than 1 game
 get_true_sequences <- function(x) {
   rle_x <- rle(x)
   true_lengths <- rle_x$lengths[rle_x$values == TRUE]
@@ -253,23 +298,34 @@ get_true_sequences <- function(x) {
 }
 
 # Apply function to each group
-result <- outcomes %>%
-  # group_by(group) %>%
+result_gm <- outcomes_gm |> 
   summarise(session_length = list(get_true_sequences(less_3)))
 
-result |> 
+result_gm |> 
+  unnest_longer(session_length) |> 
+  summarise(med_session = median(session_length), 
+            avg = mean(session_length))
+
+## plot the histogram of games per session
+result_gm |> 
   unnest_longer(session_length) |> 
   ggplot(aes(session_length)) +
   geom_histogram() 
 
+
+## proportion of sessions with more than 1 game
 result |> 
   unnest_longer(session_length) |> 
-  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |> 
-  # group_by(Username) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |>  
   summarise(sum(multiple)/n())
 
+result |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 10, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+## repeat for blitz
 outcomes_blitz <- blitz_data_gm |> 
-  # group_by(Username) |> 
   select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
@@ -281,7 +337,6 @@ outcomes_blitz <- blitz_data_gm |>
 
 # Apply function to each group
 result_blitz <- outcomes_blitz %>%
-  # group_by(group) %>%
   summarise(session_length = list(get_true_sequences(less_7_min)))
 
 result_blitz |> 
@@ -299,15 +354,14 @@ result_blitz |>
 
 
 
-# Examining Model Fit
+# Section 4: The Fitted Model
 
 
 ## 1700-1900 Previous Game
 
 ### Global Parameters
 
-```{r}
-
+```{r plot global parameters}
 data_path <- here("results/lichess1700-1900")
 
 fit_17_19_bullet_prev <- readRDS(file = 
@@ -343,6 +397,22 @@ ggsave(plot = global_17_19_bullet_prev,
        height = 5, width = 7)
 
 ```
+
+
+```{r interpret the estimated coefficients 17-19}
+
+gamma_ests <- fit_17_19_bullet_prev$summary(variables = c("gamma1",
+                                                          "gamma2")) |> 
+  pull(mean)
+## compute change in win probability for gamma1
+1/(1 + exp(-1 * (0)))
+1/(1 + exp(-1 * (gamma_ests[1])))
+
+1/(1 + exp(-1 * (0))) ## equally rated, playing as black
+1/(1 + exp(-1 * (100 * gamma_ests[2])))
+
+```
+
 
 
 ### Winner and Player Effects
@@ -414,39 +484,6 @@ ggsave(plot = indiv_plot_17_19,
 ```
 
 
-## 2000-2200 Previous Game
-
-```{r}
-
-data_path <- here("results/lichess2000-2200")
-
-fit_20_22_bullet_prev <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
-
-
-fit_20_22_bullet_prev$summary(variables = c("mu_beta",
-                                            "gamma1", "gamma2",
-                                            "sigma_1", "tau[1]", "tau[2]",
-                                            "sigma_g1", "sigma_g2"))
-```
-
-
-## 2300-2500 Previous Game
-
-```{r}
-
-data_path <- here("results/lichess2300-2500")
-
-fit_23_25_bullet_prev <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
-
-
-fit_23_25_bullet_prev$summary(variables = c("mu_beta",
-                                            "gamma1", "gamma2",
-                                            "sigma_1", "tau[1]", "tau[2]",
-                                            "sigma_g1", "sigma_g2"))
-```
-
 
 ## GM previous game
 
@@ -473,7 +510,7 @@ global_gm_bullet_prev <- fit_gm_bullet_prev$draws(c("mu_beta",
   facet_wrap(~name, ncol = 4, scales = "free") +
   labs(x = element_blank(), y = element_blank()) +
   theme_4col() +
-  scale_x_continuous(breaks = breaks_pretty(n = 3)) 
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) 
 
 
 global_gm_bullet_prev
@@ -487,6 +524,24 @@ ggsave(plot = global_gm_bullet_prev,
 
 
 
+```{r interpret the estimated coefficients gm}
+
+gamma_ests_gm <- fit_gm_bullet_prev$summary(variables = c("gamma1",
+                                                          "gamma2")) |> 
+  pull(mean)
+
+## compute change in win probability for gamma1
+1/(1 + exp(-1 * (0)))
+1/(1 + exp(-1 * (gamma_ests_gm[1])))
+
+
+## change in win probability for elo difference
+
+1/(1 + exp(-1 * (0))) ## equally rated, playing as black
+1/(1 + exp(-1 * (100 * gamma_ests_gm[2])))
+
+
+```
 
 ### Winner and Player Effects
 
@@ -938,7 +993,7 @@ ggsave(plot = comp_gm_player,
 
 
 
-# Model Checking
+# Section 5: Model Validation
 
 We currently have two initial model checking 
 procedures.
@@ -1596,5 +1651,73 @@ ggsave(plot = perm_gm_player,
 
 ## should make this 12 players so it looks a bit better
 
+```
+
+
+
+# Supplementary Material
+
+This contains all analysis and figures which are included in 
+the supplementary materials.
+
+
+## Additional Summary Information
+
+```{r}
+
+## how many times does a focal player play another focal player
+
+focal_17_19 <- unique(bullet_data$Username)
+
+bullet_data |> 
+  mutate(opponent = ifelse(Username == White, Black, White)) |> 
+  mutate(focal_opp = ifelse(opponent %in% focal_17_19, 1, 0)) |> 
+  select(Username, focal_opp) |> 
+  summarise(sum(focal_opp)/ n())
+  
+focal_gm <- unique(bullet_data_gm$Username)
+
+bullet_data_gm |> 
+  mutate(opponent = ifelse(Username == White, Black, White)) |> 
+  mutate(focal_opp = ifelse(opponent %in% focal_gm, 1, 0)) |> 
+  select(Username, focal_opp) |> 
+  summarise(sum(focal_opp)/ n())
+
+```
+
+## Results for Other Cohorts
+
+
+## 2000-2200 Previous Game
+
+```{r}
+
+data_path <- here("results/lichess2000-2200")
+
+fit_20_22_bullet_prev <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
+
+
+fit_20_22_bullet_prev$summary(variables = c("mu_beta",
+                                            "gamma1", "gamma2",
+                                            "sigma_1", "tau[1]", "tau[2]",
+                                            "sigma_g1", "sigma_g2"))
+```
+
+
+## 2300-2500 Previous Game
+
+```{r}
+
+data_path <- here("results/lichess2300-2500")
+
+fit_23_25_bullet_prev <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_prev.RDS"))
+
+
+fit_23_25_bullet_prev$summary(variables = c("mu_beta",
+                                            "gamma1", "gamma2",
+                                            "sigma_1", "tau[1]", "tau[2]",
+                                            "sigma_g1", "sigma_g2"))
 ```
 

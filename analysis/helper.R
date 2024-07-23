@@ -53,6 +53,13 @@ get_hist <- function(user, games, prev_n) {
   hist_games
 }
 
+## extract the sessions containing more than 1 game
+get_true_sequences <- function(x) {
+  rle_x <- rle(x)
+  true_lengths <- rle_x$lengths[rle_x$values == TRUE]
+  return(true_lengths)
+}
+
 
 
 ## plotting defaults
