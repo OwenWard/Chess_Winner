@@ -115,3 +115,26 @@ theme_8col <- function(){
       legend.position = "none"
     )
 }
+
+
+
+theme_10col <- function(){ 
+  theme_bw() %+replace%    #replace elements we want to change
+    
+    theme(
+      
+      #grid elements
+      panel.spacing.x = unit(0.25, "lines"),
+      
+      #text elements
+      plot.title = element_text(size = title_size),
+      axis.text = element_text(size = axis_text_size - 7),
+      axis.title = element_text(size = axis_title),
+      legend.text = element_text(size = legend_text),
+      strip.text = element_text(size = axis_title - 9, 
+                                margin = margin(1.5, 1.5, 2, 1.5)),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      legend.position = "none"
+    )
+}
