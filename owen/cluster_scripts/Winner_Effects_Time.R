@@ -141,7 +141,7 @@ stan_data_ave_first <- list(N = nrow(init_data),
 
 saveRDS(stan_data_ave_first, file = here(save_path, "stan_data_first.RDS"))
 
-stan_file <- here("owen", "cluster_scripts", "final_model_scale_priors.stan")
+stan_file <- here("owen", "cluster_scripts", "final_model_scale_priors_gen.stan")
 
 mod <- cmdstan_model(stan_file)
 
@@ -159,8 +159,6 @@ fit3_first$save_object(file = here(save_path, "select_users_first_bullet.RDS"))
 ## then repeat for the last 1000 games for each
 tidy_games <- map_dfr(users, get_hist, last_games, prev_n = 1) %>% 
   as_tibble()
-
-
 
 init_data <- tidy_games %>% 
   mutate(WhiteElo = as.numeric(WhiteElo), 
