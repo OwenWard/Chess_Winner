@@ -33,14 +33,12 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results/lichess1700-1900/")
 
-# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
-# ## if need to run it locally
 
-all_save_path[2] <- here("results/lichess2000-2200/")
-all_save_path[3] <- here("results/lichess2300-2500/")
-all_save_path[4] <- here("results/lichessGrandmasters/")
+all_save_path[1] <- here("results/lichess1700-1900_test/")
+all_save_path[2] <- here("results/lichess2000-2200_test/")
+all_save_path[3] <- here("results/lichess2300-2500_test/")
+all_save_path[4] <- here("results/lichessGrandmasters_test/")
 
 
 data_path <- all_data_path[path_id]
@@ -143,7 +141,7 @@ stan_data_ave_first <- list(N = nrow(init_data),
 
 saveRDS(stan_data_ave_first, file = here(save_path, "stan_data_first.RDS"))
 
-stan_file <- here("owen", "cluster_scripts", "model_feb29_small.stan")
+stan_file <- here("owen", "cluster_scripts", "final_model_scale_priors.stan")
 
 mod <- cmdstan_model(stan_file)
 
