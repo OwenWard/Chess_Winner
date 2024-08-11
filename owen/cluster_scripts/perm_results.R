@@ -120,7 +120,8 @@ stan_data_ave_last <- list(N = nrow(init_data),
                            elo = init_data$elo_diff,
                            win_prop = init_data$ave_prop)
 
-stan_file <- here("owen", "cluster_scripts", "model_feb29_small.stan")
+stan_file <- here("owen", "cluster_scripts",
+                  "final_model_scale_priors.stan")
 
 mod <- cmdstan_model(stan_file)
 
