@@ -27,6 +27,7 @@ library(posterior)
 library(bayesplot)
 library(loo)
 library(scales)
+library(ggridges)
 library(here)
 
 options(mc.cores = parallel::detectCores())
@@ -533,6 +534,33 @@ ggsave(plot = indiv_plot_17_19,
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "17_19_prev_indiv.png")), dpi = 600,
        height = 7, width = 7)
+
+```
+
+```{r new boxplots}
+
+player_pars |> 
+  filter(param == 2) |> 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  # geom_boxplot() +
+  geom_density_ridges(alpha = 0.5, 
+                      quantiles = 0.5, 
+                      quantile_lines = T, 
+                      rel_min_height = 0.005) + 
+  # geom_density_ridges2(scale = 1, rel_min_height = 0.05) +
+  # coord_flip() +
+  labs(y = "", x = "Estimated W/L-Effect") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  xlim(c(-0.375, 0.375))
+
+player_pars |> 
+  filter(param == 1) |> 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  geom_boxplot(outliers = FALSE) +
+  # coord_flip() +
+  labs(y = "", x = "Estimated Player Effect") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed")
+
 
 ```
 
