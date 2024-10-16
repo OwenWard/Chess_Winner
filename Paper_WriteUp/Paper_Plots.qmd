@@ -29,9 +29,8 @@ library(loo)
 library(scales)
 library(ggridges)
 library(here)
-
+library(viridis)
 options(mc.cores = parallel::detectCores())
-
 theme_set(theme_bw())
 
 
@@ -39,13 +38,11 @@ theme_set(theme_bw())
 source(here("analysis", "helper.R"))
 source(here("analysis", "plot_templates.R"))
 
-
 all_data_path <- rep(NA, 4)
 all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-
 res_data_path <- rep(NA, 4)
 res_data_path[1] <- here("results/lichess1700-1900/")
 res_data_path[2] <- here("results/lichess2000-2200/")
@@ -70,7 +67,7 @@ data_path <- all_data_path[path_id]
 
 files <- list.files(data_path)
 
-lichess_data <- files %>% 
+lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
 ## overall summary of all event types
@@ -101,8 +98,8 @@ lichess_data |>
 
 bullet_data <- lichess_data |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "60+0") %>%
-  filter(Variant == "Standard") %>%
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated bullet game", Event))
 
 bullet_data |> nrow()
@@ -138,8 +135,8 @@ bullet_data |>
 
 blitz_data <- lichess_data |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "180+0") %>%
-  filter(Variant == "Standard") %>%
+  filter(TimeControl == "180+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated blitz game", Event))
 
 
@@ -228,7 +225,7 @@ path_id <- 4  ## for GMs
 data_path <- all_data_path[path_id]
 files <- list.files(data_path)
 
-lichess_data_gm <- files %>% 
+lichess_data_gm <- files |> 
   map_dfr(~read_player(data_path, .x))
 
 ## get proportion of bullet games that are of each time format
@@ -253,8 +250,8 @@ lichess_data_gm |>
 
 bullet_data_gm <- lichess_data_gm |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "60+0") %>%
-  filter(Variant == "Standard") %>%
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated bullet game", Event))
 
 bullet_data_gm |> nrow()
@@ -268,8 +265,8 @@ bullet_data_gm |>
 
 blitz_data_gm <- lichess_data_gm |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "180+0") %>%
-  filter(Variant == "Standard") %>%
+  filter(TimeControl == "180+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated blitz game", Event))
 
 blitz_data_gm |> 
@@ -364,7 +361,7 @@ outcomes_blitz <- blitz_data_gm |>
 
 
 # Apply function to each group
-result_blitz <- outcomes_blitz %>%
+result_blitz <- outcomes_blitz |>
   summarise(session_length = list(get_true_sequences(less_7_min)))
 
 result_blitz |> 
@@ -403,6 +400,17 @@ bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
 
 ## easiest way to make this grayscale would be to not use mcmc_hist at all
 
+facet_labels <- as_labeller(c(
+  mu_beta = "mu[beta]",
+  gamma1 = "gamma[1]",
+  gamma2 = "gamma[2]",
+  sigma_1 = "sigma[1]",
+  `tau[1]` = "tau[1]",
+  `tau[2]` = "tau[2]",
+  sigma_g1 = "sigma[g[1]]",
+  sigma_g2 = "sigma[g[2]]"
+), label_parsed)
+
 global_17_19_bullet_prev <- fit_17_19_bullet_prev$draws(c("mu_beta",
                                                           "gamma1", "gamma2",
                            "sigma_1", "tau[1]", "tau[2]",
@@ -411,7 +419,8 @@ global_17_19_bullet_prev <- fit_17_19_bullet_prev$draws(c("mu_beta",
   pivot_longer(cols = "mu_beta":"sigma_g2") |> 
   ggplot(aes(value)) +
   geom_histogram() +
-  facet_wrap(~name, ncol = 4, scales = "free") +
+  facet_wrap(~name, ncol = 4, scales = "free",
+             labeller = labeller(name = facet_labels)) +
   labs(x = element_blank(), y = element_blank()) +
   theme_4col() +
   scale_x_continuous(breaks = breaks_pretty(n = 3))
@@ -455,10 +464,10 @@ player_id <- as_tibble(bullet_17_19) |>
   rename(player_name = value)
   
 
-player_pars <- fit_17_19_bullet_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars <- fit_17_19_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -539,28 +548,33 @@ ggsave(plot = indiv_plot_17_19,
 
 ```{r new boxplots}
 
-player_pars |> 
+winner_plot_17_19 <- player_pars |> 
   filter(param == 2) |> 
   ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
-  # geom_boxplot() +
-  geom_density_ridges(alpha = 0.5, 
-                      quantiles = 0.5, 
-                      quantile_lines = T, 
-                      rel_min_height = 0.005) + 
-  # geom_density_ridges2(scale = 1, rel_min_height = 0.05) +
-  # coord_flip() +
-  labs(y = "", x = "Estimated W/L-Effect") +
+  stat_histinterval() +
+  labs(x = "Estimated W/L-Effect", y = element_blank(), 
+       title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.375, 0.375))
+  theme_single_y()
 
-player_pars |> 
+ggsave(plot = winner_plot_17_19, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "17_19_prev_winner.png")), dpi = 600,
+       height = 7, width = 7)
+
+indiv_plot_17_19 <- player_pars |> 
   filter(param == 1) |> 
   ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
-  geom_boxplot(outliers = FALSE) +
-  # coord_flip() +
-  labs(y = "", x = "Estimated Player Effect") +
-  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed")
+  stat_histinterval() +
+  labs(x = "Estimated Player Effect", y = element_blank()) +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
 
+
+ggsave(plot = indiv_plot_17_19, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "17_19_prev_indiv.png")), dpi = 600,
+       height = 7, width = 7)
 
 ```
 
@@ -588,7 +602,8 @@ global_gm_bullet_prev <- fit_gm_bullet_prev$draws(c("mu_beta",
   pivot_longer(cols = "mu_beta":"sigma_g2") |> 
   ggplot(aes(value)) +
   geom_histogram() +
-  facet_wrap(~name, ncol = 4, scales = "free") +
+   facet_wrap(~name, ncol = 4, scales = "free",
+             labeller = labeller(name = facet_labels)) +
   labs(x = element_blank(), y = element_blank()) +
   theme_4col() +
   scale_x_continuous(breaks = breaks_pretty(n = 2)) 
@@ -631,10 +646,10 @@ player_id <- as_tibble(bullet_gm) |>
   rename(player_name = value)
   
 
-player_pars <- fit_gm_bullet_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -676,12 +691,12 @@ player_pars |>
 ## then the winner effects plot
 winner_plot_gm <- player_pars |> 
   filter(param == 2) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_wrap(~player_name, scales = "free", ncol = 5) +
-  theme_5col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 3)) 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  stat_histinterval() +
+  labs(x = "Estimated W/L-Effect", y = element_blank(), 
+       title = "GM Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
 
 
 winner_plot_gm
@@ -697,12 +712,12 @@ ggsave(plot = winner_plot_gm,
 
 indiv_plot_gm <- player_pars |> 
   filter(param == 1) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_wrap(~player_name, scales = "free", ncol = 5) +
-  theme_5col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 3)) 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  stat_histinterval() +
+  labs(x = "Estimated Player Effect", y = element_blank(), 
+       title = "GM Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
 
 
 indiv_plot_gm
@@ -754,46 +769,43 @@ fit_gm_bullet_10 <-
   readRDS(file =paste0(data_path,"/all_rated_bullet_model.RDS"))
 
 prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
-                                        "gamma1", "gamma2",
-                                        "sigma_1", "tau[1]",
-                                        "tau[2]",
-                                        "sigma_g1", "sigma_g2")) |> 
+                                        "gamma1", "gamma2")) |> 
   as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Prev. Game")
 
 pre_10_pars <- fit_gm_bullet_10$draws(c("mu_beta",
-                                        "gamma1", "gamma2",
-                                        "sigma_1", "tau[1]",
-                                        "tau[2]",
-                                        "sigma_g1", "sigma_g2")) |> 
+                                        "gamma1", "gamma2")) |> 
   as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Prev. 10 Games")
 
-hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_grid(rows = vars(model), cols = vars(name), scales = "free") +
-  theme_8col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) 
 
-hist_comp_global
+hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |> 
+  ggplot(aes(x = value, color = model)) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "D")
 
 ggsave(plot = hist_comp_global, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "gm_comp_global.png")), dpi = 600,
-       height = 4, width = 7)
+       height = 3.5, width = 7)
 
 
 ## then compare the winner effects and individual effects. 
 ## will just show for the first 6 players for convenience
 
-player_pars_pre <- fit_gm_bullet_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_pre <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -804,10 +816,10 @@ player_pars_pre <- fit_gm_bullet_prev$draws() %>%
   mutate(model = "Prev. Game")
 
 
-player_pars_pre_10 <- fit_gm_bullet_10$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_pre_10 <- fit_gm_bullet_10$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -819,15 +831,19 @@ player_pars_pre_10 <- fit_gm_bullet_10$draws() %>%
 
 
 
-hist_comp_winner <- bind_rows(player_pars_pre, player_pars_pre_10) |> 
-  filter(id < 7) |> 
+hist_comp_winner <- player_pars_pre |> 
   filter(param == 2) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_grid(rows = vars(model), cols = vars(player_name), scales = "free") +
-  theme_6col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 3)) 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_pre_10 |> filter(param == 2) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = position_dodge(width = 1)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "D")
 
 hist_comp_winner
   
@@ -860,6 +876,7 @@ bind_rows(player_pars_pre, player_pars_pre_10) |>
 
 
 ## then player effects
+## should update this also
 hist_comp_player <- bind_rows(player_pars_pre, player_pars_pre_10) |> 
   filter(id < 7) |> 
   filter(param == 1) |> 
@@ -890,7 +907,6 @@ Compare the global parameters and the winner effects here, using the
 previous game only.
 
 ```{r bullet v blitz for 17-19}
-
 data_path <- here("results/lichess1700-1900")
 
 fit_17_19_bullet_prev <- readRDS(file = paste0(data_path,
@@ -898,14 +914,10 @@ fit_17_19_bullet_prev <- readRDS(file = paste0(data_path,
 
 bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
 
-
 fit_17_19_blitz_prev <- readRDS(file = paste0(data_path,
                                               "/all_rated_blitz_model_prev.RDS"))
 
-
 blitz_17_19 <- readRDS(file = paste0(data_path, "/users_blitz.RDS"))
-
-
 
 ## compare global effects first
 
@@ -928,7 +940,8 @@ blitz_pars <- fit_17_19_blitz_prev$draws(c("mu_beta",
 bul_blit_comp_global <- bind_rows(bullet_pars, blitz_pars) |> 
   ggplot(aes(value)) +
   geom_histogram() +
-  facet_grid(rows = vars(model), cols = vars(name), scales = "free") +
+  facet_grid(rows = vars(model), cols = vars(name), scales = "free",
+              labeller = labeller(name = facet_labels)) +
   theme_8col() +
   labs(x = element_blank(), y = element_blank()) +
   scale_x_continuous(breaks = breaks_pretty(n = 2)) 
@@ -943,12 +956,10 @@ ggsave(plot = bul_blit_comp_global,
 
 
 ## then repeat for winner and player effects
-
-
-player_pars_bullet <- fit_17_19_bullet_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_bullet <- fit_17_19_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -958,11 +969,10 @@ player_pars_bullet <- fit_17_19_bullet_prev$draws() %>%
   left_join(player_id, by = "id") |> 
   mutate(model = "Bullet")
 
-
-player_pars_blitz <- fit_17_19_blitz_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_blitz <- fit_17_19_blitz_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -1021,43 +1031,34 @@ data_path <- here("results/lichessGrandmasters")
 
 fit_gm_bullet_prev <- readRDS(file = paste0(data_path,
                                               "/all_rated_bullet_model_prev.RDS"))
-
 bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-
-
 fit_gm_blitz_prev <- readRDS(file = paste0(data_path,
                                               "/all_rated_blitz_model_prev.RDS"))
-
-
 blitz_gm <- readRDS(file = paste0(data_path, "/users_blitz.RDS"))
-
-
-
 ## compare global effects first
-
 bullet_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
-                                                          "gamma1", "gamma2",
-                           "sigma_1", "tau[1]", "tau[2]",
-                           "sigma_g1", "sigma_g2")) |> 
+                                          "gamma1", "gamma2")) |> 
   as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Bullet")
 
 blitz_pars <- fit_gm_blitz_prev$draws(c("mu_beta",
-                                                          "gamma1", "gamma2",
-                           "sigma_1", "tau[1]", "tau[2]",
-                           "sigma_g1", "sigma_g2")) |> 
+                                        "gamma1", "gamma2")) |> 
   as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Blitz")
 
 bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_grid(rows = vars(model), cols = vars(name), scales = "free") +
-  theme_8col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) 
+  ggplot(aes(x = value, y = name, color = model)) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "D")
 
 
 bul_blit_gm_comp_global
@@ -1065,16 +1066,16 @@ bul_blit_gm_comp_global
 ggsave(plot = bul_blit_gm_comp_global, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "bul_blitz_comp_gm_global.png")), dpi = 600,
-       height = 4, width = 7)
+       height = 3.5, width = 7)
 
 
 ## then repeat for winner and player effects
 
 
-player_pars_bullet <- fit_gm_bullet_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_bullet <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -1085,10 +1086,10 @@ player_pars_bullet <- fit_gm_bullet_prev$draws() %>%
   mutate(model = "Bullet")
 
 
-player_pars_blitz <- fit_gm_blitz_prev$draws() %>% 
-  as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+player_pars_blitz <- fit_gm_blitz_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -1099,15 +1100,21 @@ player_pars_blitz <- fit_gm_blitz_prev$draws() %>%
   mutate(model = "Blitz")
 
 
-comp_gm_winner <- bind_rows(player_pars_bullet, player_pars_blitz) |> 
-  filter(id < 7) |> 
+comp_gm_winner <- player_pars_bullet |> 
   filter(param == 2) |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_grid(rows = vars(model), cols = vars(player_name), scales = "free") +
-  theme_6col() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_x_continuous(breaks = breaks_pretty(n = 3))
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_blitz |> 
+              filter(param == 2) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = position_dodge(width = 1)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
+  scale_color_viridis_d(option = "D")
+
 
 comp_gm_winner
 
@@ -1117,6 +1124,7 @@ ggsave(plot = comp_gm_winner,
        height = 5, width = 7)
 
 
+## TO DO - this needs to be updated
 comp_gm_player <- bind_rows(player_pars_bullet, player_pars_blitz) |> 
   filter(id < 7) |> 
   filter(param == 1) |> 
@@ -1169,12 +1177,12 @@ fit_17_19_first <- readRDS(file =  here(data_path, "time",
 fit_17_19_last <- readRDS(file =  here(data_path, "time",
                                         "select_users_last_bullet.RDS"))
 
-global_winner <- as_draws_df(fit_17_19_first$draws(variables = "mu_beta")) %>% 
-  rename("Initial Games" = mu_beta) %>% 
-  bind_cols(as_draws_df(fit_17_19_last$draws(variables = "mu_beta")) %>% 
-              rename("Later Games" = mu_beta)) %>% 
-  select(`Initial Games`, `Later Games`) %>% 
-  pivot_longer(cols = everything()) %>% 
+global_winner <- as_draws_df(fit_17_19_first$draws(variables = "mu_beta")) |> 
+  rename("Initial Games" = mu_beta) |> 
+  bind_cols(as_draws_df(fit_17_19_last$draws(variables = "mu_beta")) |> 
+              rename("Later Games" = mu_beta)) |> 
+  select(`Initial Games`, `Later Games`) |> 
+  pivot_longer(cols = everything()) |> 
   ggplot(aes(value, fill = name)) +
   geom_histogram(position = "identity") +
   facet_wrap(~name, ncol = 1) +
@@ -1194,37 +1202,37 @@ global_winner
 
 users <- readRDS(file = here(data_path, "time", "select_users_bullet.RDS"))
 ## indiv winner effects
-random_effect_first <- fit_17_19_first$draws() %>% as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+random_effect_first <- fit_17_19_first$draws() |> as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) %>% 
+         player_id = paste0("beta[", id, "]")) |> 
   mutate(when = "Initial")
 
-random_effect_last <- fit_17_19_last$draws() %>% as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+random_effect_last <- fit_17_19_last$draws() |> as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) %>% 
+         player_id = paste0("beta[", id, "]")) |> 
   mutate(when = "Later")
 
-betas <- bind_rows(random_effect_first, random_effect_last) %>% 
+betas <- bind_rows(random_effect_first, random_effect_last) |> 
   select(value, param, id, when)
 
 player_id <- tibble(id = as.character(1:10), player = users)
 
-betas %>% left_join(player_id, by = "id") %>% 
+betas |> left_join(player_id, by = "id") |> 
   mutate(player = factor(player, levels = users))
 
-winner_effect_plot <- betas %>% 
-  left_join(player_id, by = "id") %>% 
-  mutate(player = factor(player, levels = users)) %>% 
-  filter(param == 2) %>% 
-  mutate(id = factor(id, levels = c(1:10))) %>% 
+winner_effect_plot <- betas |> 
+  left_join(player_id, by = "id") |> 
+  mutate(player = factor(player, levels = users)) |> 
+  filter(param == 2) |> 
+  mutate(id = factor(id, levels = c(1:10))) |> 
   ggplot(aes(value, fill = when)) +
   geom_histogram() +
   geom_vline(xintercept = 0, alpha = 0.5) +
@@ -1260,10 +1268,10 @@ fit_17_19_last <- readRDS(file =  here(data_path, "time",
 
 fit_samples <- as_draws_df(fit_17_19_first$draws())
 
-fit_samp <- fit_samples %>% 
+fit_samp <- fit_samples |> 
   select(!starts_with(c("log_lik", "yrep")))
 
-y_rep <- fit_samples %>% select(starts_with("y_rep"))
+y_rep <- fit_samples |> select(starts_with("y_rep"))
 
 rm(fit_samples)
 rm(fit_samp)
@@ -1271,30 +1279,30 @@ rm(fit_samp)
 stan_data_ave_first <- readRDS(file = here(data_path, "time",
                                            "stan_data_first.RDS"))
 
-y_rep_mod <- y_rep %>% 
-  rownames_to_column() %>%  
-  pivot_longer(-rowname) %>% 
-  pivot_wider(names_from=rowname, values_from=value) %>% 
+y_rep_mod <- y_rep |> 
+  rownames_to_column() |>  
+  pivot_longer(-rowname) |> 
+  pivot_wider(names_from=rowname, values_from=value) |> 
   ## remove the draws and chains here
   mutate(focal_id = stan_data_ave_first$id)
 
-games_won <- y_rep_mod %>% 
-  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") %>% 
-  group_by(focal_id, draw) %>% 
+games_won <- y_rep_mod |> 
+  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") |> 
+  group_by(focal_id, draw) |> 
   summarise(games_won = sum(y)) 
 
 orig_data <- tibble(outcome = stan_data_ave_first$y,
                     focal_id = stan_data_ave_first$id)
 
-orig_games_won <- orig_data %>% 
-  group_by(focal_id) %>% 
-  summarise(games_won = sum(outcome)) %>% 
-  mutate(focal_id = as.character(focal_id)) %>% 
+orig_games_won <- orig_data |> 
+  group_by(focal_id) |> 
+  summarise(games_won = sum(outcome)) |> 
+  mutate(focal_id = as.character(focal_id)) |> 
   left_join(player_id, by = c("focal_id" = "id"))
 
-p1 <- games_won %>% 
-  mutate(focal_id = as.character(focal_id)) %>% 
-  left_join(player_id, by = c("focal_id" = "id")) %>% 
+p1 <- games_won |> 
+  mutate(focal_id = as.character(focal_id)) |> 
+  left_join(player_id, by = c("focal_id" = "id")) |> 
   ggplot(aes(x = games_won)) +
   geom_histogram() +
   facet_wrap(~player, scales = "free", ncol = 5) +
@@ -1320,16 +1328,16 @@ ggsave(plot = p1,
 
 ```{r ppc2 for 17-19}
 ## time varying ppc for 1700-1900 players
-draws <- fit_17_19_first$draws() %>% as_draws_df() %>%
-  select(starts_with(c("beta[", "gamma"))) %>%
-  mutate(draw = row_number()) %>% 
-  pivot_longer(cols = "beta[1,1]":"beta[2,10]") %>% 
+draws <- fit_17_19_first$draws() |> as_draws_df() |>
+  select(starts_with(c("beta[", "gamma"))) |>
+  mutate(draw = row_number()) |> 
+  pivot_longer(cols = "beta[1,1]":"beta[2,10]") |> 
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) %>% 
-  select(-name) %>% 
-  pivot_wider(names_from = param, values_from = value) %>% 
+         player_id = paste0("beta[", id, "]")) |> 
+  select(-name) |> 
+  pivot_wider(names_from = param, values_from = value) |> 
   rename(beta1 = `1`, beta2 = `2`)
 
 stan_data_ave_last <- readRDS(file = here(data_path, "time",
@@ -1344,14 +1352,14 @@ ppc_data <- readRDS(file = here(data_path, "time",
                                 "ppc_fit_first_last.RDS"))
 
 future_results <- tibble(focal = as.character(stan_data_ave_last$id),
-                         result = stan_data_ave_last$y) %>% 
-  group_by(focal) %>%
-  summarise(total = sum(result)) %>% 
-  rename(id = focal) %>% 
+                         result = stan_data_ave_last$y) |> 
+  group_by(focal) |>
+  summarise(total = sum(result)) |> 
+  rename(id = focal) |> 
   left_join(player_id, by = "id")
 
-last_ppc <- ppc_data %>%  
-  left_join(player_id, by = "id") %>% 
+last_ppc <- ppc_data |>  
+  left_join(player_id, by = "id") |> 
   ggplot(aes(x = games_won)) + 
   geom_histogram() + 
   geom_vline(data = future_results, 
@@ -1385,7 +1393,7 @@ path_id <- 1
 data_path <- res_data_path[path_id]
 (perm_files <- list.files(perm_data_path))
 
-perm_17_19 <- perm_files[1:1000] %>% 
+perm_17_19 <- perm_files[1:1000] |> 
   map_dfr(~read_rds(here(perm_data_path, .x)))
 
 sim_pars <- perm_17_19 |> 
@@ -1431,21 +1439,21 @@ path_id <- 1  ## for 1700-1900
 data_path <- all_data_path[path_id]
 files <- list.files(data_path)
 
-lichess_data <- files %>% 
+lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
 bullet_data <- lichess_data |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "60+0") %>%
-  filter(Variant == "Standard") %>%
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated bullet game", Event))
 
-select_users <- bullet_data %>% 
-  group_by(Username) %>% 
-  tally() %>% 
-  arrange(-n) %>% 
+select_users <- bullet_data |> 
+  group_by(Username) |> 
+  tally() |> 
+  arrange(-n) |> 
   ## will change this to n = 20 when run on cluster potentially
-  slice_max(order = n, n = 20) %>% 
+  slice_max(order = n, n = 20) |> 
   pull(Username)
 
 ## then repeat for the winner effects
@@ -1509,10 +1517,10 @@ fit_gm_last <- readRDS(file =  here(data_path, "time",
 
 fit_samples <- as_draws_df(fit_gm_first$draws())
 
-fit_samp <- fit_samples %>% 
+fit_samp <- fit_samples |> 
   select(!starts_with(c("log_lik", "yrep")))
 
-y_rep <- fit_samples %>% select(starts_with("y_rep"))
+y_rep <- fit_samples |> select(starts_with("y_rep"))
 
 rm(fit_samples)
 rm(fit_samp)
@@ -1520,16 +1528,16 @@ rm(fit_samp)
 stan_data_ave_first <- readRDS(file = here(data_path, "time",
                                            "stan_data_first.RDS"))
 
-y_rep_mod <- y_rep %>% 
-  rownames_to_column() %>%  
-  pivot_longer(-rowname) %>% 
-  pivot_wider(names_from=rowname, values_from=value) %>% 
+y_rep_mod <- y_rep |> 
+  rownames_to_column() |>  
+  pivot_longer(-rowname) |> 
+  pivot_wider(names_from=rowname, values_from=value) |> 
   ## remove the draws and chains here
   mutate(focal_id = stan_data_ave_first$id)
 
-games_won <- y_rep_mod %>% 
-  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") %>% 
-  group_by(focal_id, draw) %>% 
+games_won <- y_rep_mod |> 
+  pivot_longer(cols = `1`:`4000`, names_to = "draw", values_to = "y") |> 
+  group_by(focal_id, draw) |> 
   summarise(games_won = sum(y)) 
 
 orig_data <- tibble(outcome = stan_data_ave_first$y,
@@ -1540,16 +1548,16 @@ users <- readRDS(file = here(data_path, "time", "select_users_bullet.RDS"))
 ## need to give these the correct names here
 player_id <- tibble(id = as.character(1:10), player = users)
 
-orig_games_won <- orig_data %>% 
-  group_by(focal_id) %>% 
-  summarise(games_won = sum(outcome)) %>% 
-  mutate(focal_id = as.character(focal_id)) %>% 
+orig_games_won <- orig_data |> 
+  group_by(focal_id) |> 
+  summarise(games_won = sum(outcome)) |> 
+  mutate(focal_id = as.character(focal_id)) |> 
   left_join(player_id, by = c("focal_id" = "id"))
 
 
-p1 <- games_won %>% 
-  mutate(focal_id = as.character(focal_id)) %>% 
-  left_join(player_id, by = c("focal_id" = "id")) %>% 
+p1 <- games_won |> 
+  mutate(focal_id = as.character(focal_id)) |> 
+  left_join(player_id, by = c("focal_id" = "id")) |> 
   ggplot(aes(x = games_won)) +
   geom_histogram() +
   facet_wrap(~player, scales = "free", ncol = 5) +
@@ -1571,16 +1579,16 @@ ggsave(plot = p1,
                               "gm_ppc_1.png")), dpi = 600,
        height = 5, width = 7)
 
-draws <- fit_gm_first$draws() %>% as_draws_df() %>%
-  select(starts_with(c("beta[", "gamma"))) %>%
-  mutate(draw = row_number()) %>% 
-  pivot_longer(cols = "beta[1,1]":"beta[2,10]") %>% 
+draws <- fit_gm_first$draws() |> as_draws_df() |>
+  select(starts_with(c("beta[", "gamma"))) |>
+  mutate(draw = row_number()) |> 
+  pivot_longer(cols = "beta[1,1]":"beta[2,10]") |> 
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) %>% 
-  select(-name) %>% 
-  pivot_wider(names_from = param, values_from = value) %>% 
+         player_id = paste0("beta[", id, "]")) |> 
+  select(-name) |> 
+  pivot_wider(names_from = param, values_from = value) |> 
   rename(beta1 = `1`, beta2 = `2`)
 
 stan_data_ave_last <- readRDS(file = here(data_path, "time",
@@ -1595,14 +1603,14 @@ ppc_data <- readRDS(file = here(data_path, "time",
                                 "ppc_fit_first_last.RDS"))
 
 future_results <- tibble(focal = as.character(stan_data_ave_last$id),
-                         result = stan_data_ave_last$y) %>% 
-  group_by(focal) %>%
-  summarise(total = sum(result)) %>% 
-  rename(id = focal) %>% 
+                         result = stan_data_ave_last$y) |> 
+  group_by(focal) |>
+  summarise(total = sum(result)) |> 
+  rename(id = focal) |> 
   left_join(player_id, by = "id")
 
-last_ppc <- ppc_data %>%  
-  left_join(player_id, by = "id") %>% 
+last_ppc <- ppc_data |>  
+  left_join(player_id, by = "id") |> 
   ggplot(aes(x = games_won)) + 
   geom_histogram() + 
   geom_vline(data = future_results, 
@@ -1635,7 +1643,7 @@ perm_data_path <- here("results/lichessGrandmasters/perm/")
 ## read all the files in this directory
 perm_files <- list.files(perm_data_path)
 
-perm_gm <- perm_files[1:1000] %>% 
+perm_gm <- perm_files[1:1000] |> 
   map_dfr(~read_rds(here(perm_data_path, .x)))
 
 sim_pars <- perm_gm |> 
