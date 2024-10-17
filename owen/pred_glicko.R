@@ -323,6 +323,10 @@ quick_sim <- as_tibble(quick_sim) |>
   pivot_longer(cols = Sim_1:Sim_100, names_to = "Sim",
                values_to = "glicko") 
 
+
+tru_glicko <- true_elo |> 
+  rename(game = index, glicko = focal_elo)
+
 quick_sim |> 
   ggplot(aes(game, glicko)) +
   geom_line(alpha = 0.05, aes(group = Sim)) +
