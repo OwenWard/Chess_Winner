@@ -102,7 +102,6 @@ bullet_data <- lichess_data |>
   filter(grepl("rated bullet game", Event))
 
 bullet_data |> nrow()
-
 ## average number, we remove the two accounts with 1 and 3 games only
 ## throughout we do not consider those who play less than 10 games
 ## at a given format when fitting any model
