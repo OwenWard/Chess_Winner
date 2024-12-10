@@ -32,14 +32,14 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results/lichess1700-1900_check/")
+all_save_path[1] <- here("results/lichess1700-1900/")
 
 # all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
 # ## if need to run it locally
 
-all_save_path[2] <- here("results/lichess2000-2200_check/")
-all_save_path[3] <- here("results/lichess2300-2500_test/")
-all_save_path[4] <- here("results/lichessGrandmasters_check/")
+all_save_path[2] <- here("results/lichess2000-2200/")
+all_save_path[3] <- here("results/lichess2300-2500/")
+all_save_path[4] <- here("results/lichessGrandmasters/")
 
 
 data_path <- all_data_path[path_id]
@@ -49,24 +49,24 @@ dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
 
-lichess_data <- files %>% 
+lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-small_data <- lichess_data %>%
+small_data <- lichess_data |>
   mutate(Event = tolower(Event)) |>
-  # filter(Event == "Rated Bullet game") %>%
-  filter(TimeControl == "60+0") %>%
-  filter(Variant == "Standard") %>%
+  # filter(Event == "Rated Bullet game") |>
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
   filter(grepl("rated bullet game", Event))
 
 # ## what time length should be
-# small_data <- lichess_data %>%
+# small_data <- lichess_data |>
 #   mutate(Event = tolower(Event)) |>
-#   filter(TimeControl == "180+0") %>%
-#   filter(Variant == "Standard") %>%
+#   filter(TimeControl == "180+0") |>
+#   filter(Variant == "Standard") |>
 #   filter(grepl("rated blitz game", Event))
 
 users <- unique(small_data$Username)
@@ -76,29 +76,29 @@ rm(lichess_data)
 
 ## when players play less than 10 games
 ## otherwise not needed
-users <- small_data %>%
-  group_by(Username) %>%
-  tally() %>%
-  filter(n >= 10) %>%
+users <- small_data |>
+  group_by(Username) |>
+  tally() |>
+  filter(n >= 10) |>
   pull(Username)
 
 saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 # saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
-tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 5) %>% 
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) |> 
   as_tibble()
 
-init_data <- tidy_games %>%
+init_data <- tidy_games |>
   mutate(WhiteElo = as.numeric(WhiteElo),
-         BlackElo = as.numeric(BlackElo)) %>%
-  mutate(focal_user = ifelse(focal_white == 1, White, Black)) %>%
+         BlackElo = as.numeric(BlackElo)) |>
+  mutate(focal_user = ifelse(focal_white == 1, White, Black)) |>
   mutate(elo_diff = ifelse(focal_white == 1,
-                           WhiteElo - BlackElo, BlackElo - WhiteElo)) %>%
-  mutate(focal_id = match(focal_user, users)) %>%
+                           WhiteElo - BlackElo, BlackElo - WhiteElo)) |>
+  mutate(focal_id = match(focal_user, users)) |>
   select(focal_user, focal_id, focal_white,
-         focal_win_prop, elo_diff, focal_result) %>%
-  group_by(focal_id) %>%
-  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_result)) %>%
+         focal_win_prop, elo_diff, focal_result) |>
+  group_by(focal_id) |>
+  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_result)) |>
   filter(focal_result != 0.5)
 
 cat("----------\n")
@@ -135,9 +135,10 @@ fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model.RDS"))
 
 ## create some summary plots of these results
 
-random_effect_post <- fit3_ave$draws() %>% as_draws_df() %>%
-  select(starts_with("beta[")) %>%
-  pivot_longer(cols = everything()) %>%
+random_effect_post <- fit3_ave$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
   mutate(param = stringr::str_extract(name, pattern = "\\d"),
          id = stringr::str_extract(name, pattern = "\\d+]"),
          id = stringr::str_replace(id, "\\]", ""),
@@ -160,8 +161,8 @@ ggsave(filename = paste0(save_path, "/global_pars_all_rated_bullet_model.png"),
 
 theme_set(bayesplot_theme_get())
 
-random_effect_post %>%
-  filter(param == 2) %>%
+random_effect_post |>
+  filter(param == 2) |>
   ggplot(aes(value)) +
   geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
@@ -179,8 +180,8 @@ ggsave(filename = paste0(save_path, "/winner_pars_all_rated_bullet_model.png"),
 # ggsave(filename = paste0(save_path, "/winner_pars_all_rated_blitz_model.png"),
 #        width = 8, height = 8, units = "in")
 
-random_effect_post %>%
-  filter(param == 1) %>%
+random_effect_post |>
+  filter(param == 1) |>
   ggplot(aes(value)) +
   geom_histogram(fill = "#6497b1", colour = "black", size = 0.2) +
   facet_wrap(~player_id, scales = "free",
