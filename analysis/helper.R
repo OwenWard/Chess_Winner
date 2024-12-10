@@ -11,7 +11,7 @@ read_player <- function(path, file){
                                    WhiteElo = col_character(),
                                    BlackElo = col_character(),
                                    FEN = col_character())) |> 
-    select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
+    dplyr::select(Username, Event, White, Black, Result, UTCDate, UTCTime, 
            WhiteElo, BlackElo, Variant, TimeControl, Termination) |> 
     mutate(WhiteElo = parse_number(if_else(WhiteElo == "?", NA, WhiteElo)),
            BlackElo = parse_number(if_else(BlackElo == "?", NA, BlackElo)))

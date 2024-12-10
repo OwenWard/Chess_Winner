@@ -117,7 +117,7 @@ bullet_data |>
 ## and get the proportion across all focal players
  bullet_data |>  
    group_by(Username) |> 
-   select(Username, UTCDate, UTCTime) |> 
+   dplyr::select(Username, UTCDate, UTCTime) |> 
    mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
    group_by(Username) |> 
    arrange(date_time) |> 
@@ -136,7 +136,7 @@ blitz_data <- lichess_data |>
 ## repeat for blitz data using 7 minutes as the maximum gap
 blitz_data |>  
    group_by(Username) |> 
-   select(Username, UTCDate, UTCTime) |> 
+   dplyr::select(Username, UTCDate, UTCTime) |> 
    mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
    group_by(Username) |> 
    arrange(date_time) |> 
@@ -150,7 +150,7 @@ blitz_data |>
 ## look at the streaks, number of games played in a session
 outcomes <- bullet_data |> 
   # group_by(Username) |> 
-  select(Username, UTCDate, UTCTime) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
   arrange(date_time) |> 
@@ -187,7 +187,7 @@ result |>
 
 ## repeat for blitz games
 outcomes_blitz <- blitz_data |> 
-  select(Username, UTCDate, UTCTime) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
   arrange(date_time) |> 
@@ -242,6 +242,10 @@ bullet_data_gm <- lichess_data_gm |>
   filter(grepl("rated bullet game", Event))
 
 bullet_data_gm |> nrow()
+bullet_data_gm |> 
+  group_by(Termination) |>
+  tally() |> 
+  mutate(prop = n/sum(n))
 
 ## average across all focal players
 bullet_data_gm |> 
@@ -271,14 +275,14 @@ lichess_data_gm |>
   arrange(UTCDate, UTCTime) |> 
   slice_tail(n = 1) |> 
   mutate(user_elo = ifelse(Username == White, WhiteElo, BlackElo)) |> 
-  select(Username, White, Black, WhiteElo, BlackElo, user_elo) |>
+  dplyr::select(Username, White, Black, WhiteElo, BlackElo, user_elo) |>
   ungroup() |> 
   summarise(mean(user_elo))
 
 ## look at the proportion of games started within 5 minutes 
 ## of the previous game
 bullet_data_gm |> 
-  select(Username, UTCDate, UTCTime) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
   arrange(date_time) |> 
@@ -291,7 +295,7 @@ bullet_data_gm |>
 ## look at the streaks, number of games played in a session
 outcomes_gm <- bullet_data_gm |> 
   # group_by(Username) |> 
-  select(Username, UTCDate, UTCTime) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
   arrange(date_time) |> 
@@ -334,7 +338,7 @@ result_gm |>
 
 ## repeat for blitz
 outcomes_blitz <- blitz_data_gm |> 
-  select(Username, UTCDate, UTCTime) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
   group_by(Username) |> 
   arrange(date_time) |> 
@@ -1400,7 +1404,7 @@ true_beta <- fit_17_19_bullet_prev$summary() |>
   filter(player_name %in% perm_players)
 
 perm_17_19_winner <- player_pars |> 
-  filter(param == 1) |> 
+  filter(param == 2) |> 
   ggplot(aes(mean)) +
   geom_histogram() +
   facet_wrap(~player_name, ncol = 5, scales = "free") +
@@ -1415,6 +1419,32 @@ ggsave(plot = perm_17_19_winner,
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "perm_17_19_winner.png")), dpi = 600,
        height = 5, width = 7)
+
+levels <- true_beta |> 
+  filter(param == 2) |> 
+  arrange(mean) |> 
+  pull(player_name)
+  
+true_vals <- true_beta |> 
+  filter(param == 2) |>  
+  mutate(y = row_number() - 0.5,
+         yend = y + 1)
+  
+perm_17_19_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y, yend = yend), col = "red") +
+  labs(y = "", x = "Estimated W/L-Effect") +
+  theme_single_y()
+
+ggsave(plot = perm_17_19_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_17_19_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
 ```
 
 
@@ -1625,6 +1655,17 @@ perm_gm_winner <- player_pars |>
              col = "red") +
   theme_5col() +
   scale_x_continuous(breaks = breaks_pretty(n = 3))
+
+perm_gm_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y, yend = yend), col = "red") +
+  theme_single_y() +
+  labs(x = "Estimated W/L-Effect", y = "")
+
 
 perm_gm_winner
 
