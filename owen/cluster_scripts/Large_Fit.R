@@ -23,6 +23,7 @@ source(here("analysis/helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
+n <- 10 ## number of games to use for history
 
 ### load in the data to use
 
@@ -130,8 +131,10 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 ## save the stan fit as not actually that large here,
 ## when no generated quantities
 
-fit3_ave$save_object(file = here(save_path, "all_rated_bullet_model.RDS"))
-# fit3_ave$save_object(file = here(save_path, "all_rated_blitz_model.RDS"))
+fit3_ave$save_object(file = here(save_path, 
+                                 paste0("all_rated_bullet_model_n", n, ".RDS")))
+# fit3_ave$save_object(file = here(save_path, 
+#                                  paste0("all_rated_blitz_model_n", n, ".RDS")))
 
 ## create some summary plots of these results
 
