@@ -48,7 +48,7 @@ save_path <- all_save_path[path_id]
 dir.create(save_path, showWarnings = FALSE)
 
 files <- list.files(data_path)
-
+print(files)
 lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
