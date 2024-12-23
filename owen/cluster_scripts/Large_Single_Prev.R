@@ -32,10 +32,10 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results/lichess1700-1900_test/")
-all_save_path[2] <- here("results/lichess2000-2200_test/")
-all_save_path[3] <- here("results/lichess2300-2500_test/")
-all_save_path[4] <- here("results/lichessGrandmasters_test/")
+all_save_path[1] <- here("results/lichess1700-1900/")
+all_save_path[2] <- here("results/lichess2000-2200/")
+all_save_path[3] <- here("results/lichess2300-2500/")
+all_save_path[4] <- here("results/lichessGrandmasters/")
 
 
 data_path <- all_data_path[path_id]
@@ -52,18 +52,18 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-# small_data <- lichess_data %>%
-#   # filter(Event == "Rated Bullet game") %>%
-#   mutate(Event = tolower(Event)) |>
-#   filter(TimeControl == "60+0") %>%
-#   filter(Variant == "Standard") %>%
-#   filter(grepl("rated bullet game", Event))
-
 small_data <- lichess_data %>%
+  # filter(Event == "Rated Bullet game") %>%
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "180+0") %>%
+  filter(TimeControl == "60+0") %>%
   filter(Variant == "Standard") %>%
-  filter(grepl("rated blitz game", Event))
+  filter(grepl("rated bullet game", Event))
+
+# small_data <- lichess_data %>%
+#   mutate(Event = tolower(Event)) |>
+#   filter(TimeControl == "180+0") %>%
+#   filter(Variant == "Standard") %>%
+#   filter(grepl("rated blitz game", Event))
 
 users <- unique(small_data$Username)
 
@@ -75,8 +75,8 @@ users <- small_data %>%
   filter(n >= 10) %>% 
   pull(Username)
 
-# saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
-saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
+saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
+# saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) %>%  
   as_tibble()
@@ -134,9 +134,9 @@ fit3_ave <- mod$sample(data = stan_data_ave,
 fit3_ave$save_object(file = here(save_path, 
                                  paste0("all_rated_bullet_model_prev_n",
                                         n, ".RDS")))
-fit3_ave$save_object(file = here(save_path,
-                                 paste0("all_rated_blitz_model_prev_n",
-                                        n, ".RDS")))
+# fit3_ave$save_object(file = here(save_path,
+#                                  paste0("all_rated_blitz_model_prev_n",
+#                                         n, ".RDS")))
 
 ## create some summary plots of these results
 random_effect_post <- fit3_ave$draws() %>%
@@ -158,12 +158,12 @@ mcmc_hist(fit3_ave$draws(c("mu_beta",  "gamma1", "gamma2",
                            "sigma_g1", "sigma_g2")),
           facet_args = list(scales = "free"))
 
-# ggsave(filename = paste0(save_path,
-#                          "/global_pars_all_rated_bullet_model_prev.png"),
-#                          width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/global_pars_all_rated_blitz_model_prev.png"),
-       width = 8, height = 8, units = "in")
+                         "/global_pars_all_rated_bullet_model_prev.png"),
+                         width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/global_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
 
 theme_set(bayesplot_theme_get())
 
@@ -177,12 +177,12 @@ random_effect_post %>%
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
-# ggsave(filename = paste0(save_path,
-#                          "/winner_pars_all_rated_bullet_model_prev.png"),
-#        width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/winner_pars_all_rated_blitz_model_prev.png"),
+                         "/winner_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/winner_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
 
 random_effect_post %>% 
   filter(param == 1) %>% 
@@ -193,9 +193,9 @@ random_effect_post %>%
   labs(title = "Individual Player Effects")
 
 
-# ggsave(filename = paste0(save_path,
-#                          "/indiv_pars_all_rated_bullet_model_prev.png"),
-#        width = 8, height = 8, units = "in")
 ggsave(filename = paste0(save_path,
-                         "/indiv_pars_all_rated_blitz_model_prev.png"),
+                         "/indiv_pars_all_rated_bullet_model_prev.png"),
        width = 8, height = 8, units = "in")
+# ggsave(filename = paste0(save_path,
+#                          "/indiv_pars_all_rated_blitz_model_prev.png"),
+#        width = 8, height = 8, units = "in")
