@@ -22,7 +22,7 @@ source(here("analysis/helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
-
+n <- 1
 ### load in the data to use
 
 ## rerun for 2000-2200 next
