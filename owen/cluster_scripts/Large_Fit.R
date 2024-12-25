@@ -23,7 +23,7 @@ source(here("analysis/helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
-n <- 10 ## number of games to use for history
+n <- 5 ## number of games to use for history
 
 ### load in the data to use
 
@@ -86,7 +86,7 @@ users <- small_data |>
 saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 # saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
-tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 10) |> 
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
   as_tibble()
 
 init_data <- tidy_games |>
