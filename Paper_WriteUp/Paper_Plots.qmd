@@ -506,9 +506,99 @@ ggsave(plot = tidy_plot,
 
 
 ```{r figure 2}
+## Adam's code for this figure
 
-## to be added
+gm_players_elo <- list()
+gm_session_lengths <- list()
+gm_time_diffs <- list()
+gm_time_diffs_10 <- list()
 
+gm_players <- unique(bullet_data_gm$Username)
+
+for (i in 1:length(gm_players)) {
+  tidy_games_gms <- bullet_data_gm |>
+    filter(Username == gm_players[i]) |> # select only one player
+    mutate(UTCDateTime = ymd_hms(paste(UTCDate, UTCTime))) |> # convert date-time to lubridate type
+    arrange(UTCDateTime) |> # order date-time
+    mutate(time_diff = UTCDateTime - lag(UTCDateTime)) # time difference between games
+  
+  ## A check to remove duplicated games, if they occur
+  # cat("Dupes:", sum(duplicated(tidy_games_gms[1:9])), "\n", sep = " ")
+  # # some players have all their games double recorded for some reason
+  # tidy_games_gms <- tidy_games_gms[!duplicated(tidy_games_gms[1:9]), ] # remove duplicate rows
+
+  # get players average elo across all games
+  gm_players_elo[[gm_players[i]]] <- mean(c(
+    tidy_games_gms$WhiteElo[gm_players[i] == tidy_games_gms$White],
+    tidy_games_gms$BlackElo[gm_players[i] == tidy_games_gms$Black]
+  ))
+
+  # store time diffs between games
+  gm_time_diffs[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
+    lag(tidy_games_gms$UTCDateTime),
+    units = "secs"
+  ) # time between current game and previous
+  gm_time_diffs_10[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
+    lag(tidy_games_gms$UTCDateTime, 10),
+    units = "secs"
+  ) # time between current game and 10th game ago
+}
+# store in df for plotting
+gm_time_diff_df <- data.frame("time_diff" = unlist(gm_time_diffs))
+gm_time_diff_df_10 <- data.frame("time_diff" = unlist(gm_time_diffs_10))
+
+## Same distributions as amateurs, so again proceed by assuming all 
+## games played within 300 seconds (5 min) are in the same session
+for (i in 1:length(gm_players)) {
+  tidy_games_gms <- bullet_data_gm |>
+    filter(Username == gm_players[i]) |> # select only one player
+    mutate(UTCDateTime = ymd_hms(paste(UTCDate, UTCTime))) |> # convert date-time to lubridate type
+    arrange(UTCDateTime) |> # order date-time
+    mutate(time_diff = UTCDateTime - lag(UTCDateTime)) # time difference between games
+
+  length_of_sessions <- which(tidy_games_gms$time_diff > 300) - 
+    lag(which(tidy_games_gms$time_diff > 300), default = 0)
+  # game id of first game of session minus game id of first game of previous session
+
+  gm_session_lengths[[gm_players[i]]] <- length_of_sessions # store
+}
+# store in df for plotting
+gm_session_lengths_df <- data.frame(session_length = unlist(gm_session_lengths))
+
+log_time_diff_plot_gm <- ggplot(gm_time_diff_df, aes(x = as.numeric(time_diff))) +
+  geom_histogram() +
+  scale_x_continuous(
+    trans = scales::log_trans(),
+    breaks = c(1, 60, 300, 3600, 86400, 31536000),
+    labels = c("1 sec", "1 min", "5 min", "1 hour", "1 day", "1 year")
+  ) +
+  xlab("Time Between Games (Log Scale)") +
+  geom_vline(xintercept = 300, colour = "red") +
+  ylab("Frequency") #+ ggtitle("Time Difference Between Current Game and Previous Game for Amateurs")
+fig2a <- log_time_diff_plot_gm + theme_single()
+
+ggsave(plot = fig2a, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "time_between_games_gm.png")), dpi = 600,
+       height = 5, width = 7)
+
+
+session_length_plot_gm <- ggplot(gm_session_lengths_df, aes(x = session_length)) +
+  geom_histogram() +
+  scale_x_continuous(
+    trans = pseudo_log_trans(sigma = 2.36),
+    breaks = c(1, 5, 10, 100),
+    labels = c("1 game", "5 games", "10 games", "100 games"),
+    limits = c(0, 389)
+  ) +
+  xlab("Number of Games in a Session (Log Scale)") +
+  ylab("Frequency") #+ ggtitle("Number of Games per Session for GMs")
+fig2b <- session_length_plot_gm + theme_single() 
+
+ggsave(plot = fig2b, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "session_length_gm.png")), dpi = 600,
+       height = 5, width = 7)
 ```
 
 
