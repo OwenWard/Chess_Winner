@@ -108,9 +108,11 @@ bullet_data |> nrow()
 bullet_data |> 
   group_by(Username) |> 
   count() |> 
-  filter(n > 3) |>
+  filter(n > 10) |> # remove 2 players with <10 games
   ungroup() |> 
   summarise(avg = mean(n))
+
+
 
 ## for each player, count how many times they start
 ## a game with 5 minutes of the start of a previous game
@@ -132,6 +134,15 @@ blitz_data <- lichess_data |>
   filter(TimeControl == "180+0") |>
   filter(Variant == "Standard") |>
   filter(grepl("rated blitz game", Event))
+
+## count how many blitz games they play as comparison
+
+blitz_data |> 
+  group_by(Username) |> 
+  count() |> 
+  filter(n > 10) |> # remove players with < 10 games
+  ungroup() |> 
+  summarise(avg = mean(n))
 
 ## repeat for blitz data using 7 minutes as the maximum gap
 blitz_data |>  
@@ -367,10 +378,15 @@ result_blitz |>
 
 ## to be added
 
+
+
+
 ```
 
 
 ```{r figure 2}
+
+## to be added
 
 ```
 
@@ -711,7 +727,7 @@ hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |>
   theme_3col() +
   theme(legend.position = "bottom") +
   scale_x_continuous(breaks = breaks_pretty(n = 2)) +
-  scale_color_viridis_d(option = "D")
+  scale_color_viridis_d(option = "H")
 
 ggsave(plot = hist_comp_global, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
@@ -969,7 +985,7 @@ bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
   theme_3col() +
   theme(legend.position = "bottom") +
   scale_x_continuous(breaks = breaks_pretty(n = 2)) +
-  scale_color_viridis_d(option = "D")
+  scale_color_viridis_d(option = "H")
 
 
 bul_blit_gm_comp_global
@@ -1022,7 +1038,7 @@ comp_gm_winner <- player_pars_bullet |>
   theme_single_y() +
   theme(legend.position = "bottom") +
   scale_x_continuous(breaks = breaks_pretty(n = 3)) +
-  scale_color_viridis_d(option = "D")
+  scale_color_viridis_d(option = "H")
 
 
 comp_gm_winner
