@@ -50,7 +50,7 @@ model {
   sigma_g2 ~ inv_gamma(1, 1);          // prior for sd of gamma2
   gamma1 ~ normal(0, sigma_g1);        // prior for gamma1
   gamma2 ~ normal(0, sigma_g2);        // prior for gamma2
-  sigma_1 ~ normal(0, 1);
+  sigma_1 ~ inv_gamma(1, 1);
   nu[1] ~ normal(0, 1);
   nu[2] ~ normal(mu_beta, 1);          // standardized so sds here fixed
   tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
