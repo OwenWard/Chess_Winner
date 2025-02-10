@@ -52,18 +52,18 @@ lichess_data <- files %>%
 ## restrict to rated rapid and shorter here
 ## this also removes the NAs, which makes sense
 
-# small_data <- lichess_data %>%
-#   # filter(Event == "Rated Bullet game") %>%
-#   mutate(Event = tolower(Event)) |>
-#   filter(TimeControl == "60+0") %>%
-#   filter(Variant == "Standard") %>%
-#   filter(grepl("rated bullet game", Event))
+ small_data <- lichess_data %>%
+   # filter(Event == "Rated Bullet game") %>%
+   mutate(Event = tolower(Event)) |>
+   filter(TimeControl == "60+0") %>%
+   filter(Variant == "Standard") %>%
+   filter(grepl("rated bullet game", Event))
 
-small_data <- lichess_data %>%
-  mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "180+0") %>%
-  filter(Variant == "Standard") %>%
-  filter(grepl("rated blitz game", Event))
+#small_data <- lichess_data %>%
+#  mutate(Event = tolower(Event)) |>
+#  filter(TimeControl == "180+0") %>%
+#  filter(Variant == "Standard") %>%
+#  filter(grepl("rated blitz game", Event))
 
 users <- unique(small_data$Username)
 
