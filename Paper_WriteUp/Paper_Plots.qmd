@@ -741,7 +741,8 @@ indiv_plot_17_19 <- player_pars |>
   filter(param == 1) |> 
   ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
   stat_histinterval() +
-  labs(x = "Estimated Player Effect", y = element_blank()) +
+  labs(x = "Estimated Player Effect", y = element_blank(),
+       title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
 
@@ -1494,13 +1495,11 @@ sim_pars <- perm_gm |>
 
 ## then need to overlay the true values also
 true_values <- fit_gm_bullet_prev$summary() |> 
-  filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |> 
+  dplyr::filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |> 
   select(variable, mean)
 
 perm_gm_global <- sim_pars |> 
-  filter(variable %in% c("mu_beta",  "gamma1", "gamma2",
-                           "sigma_1", "tau[1]", "tau[2]",
-                           "sigma_g1", "sigma_g2")) |> 
+  dplyr::filter(variable %in% c("mu_beta",  "gamma1", "gamma2")) |> 
   ggplot(aes(mean)) +
   geom_histogram() +
   facet_wrap(~variable, scales = "free") +
@@ -1550,16 +1549,18 @@ levels <- true_beta |>
 
 true_vals <- true_beta |> 
   filter(param == 2) |>  
-  mutate(y = row_number() - 0.5,
-         yend = y + 1)
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.25,
+         yend = row_number() + 0.25)
 
 perm_gm_winner <- player_pars |> 
   filter(param == 2) |>
   mutate(y = factor(player_name, levels = levels)) |> 
   ggplot(aes(x = mean, y = y)) +
   stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
-  geom_segment(data = true_vals, 
-               aes(x = mean, y = y, yend = yend), col = "red") +
+  geom_segment(data = true_vals,
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
   theme_single_y() +
   labs(x = "Estimated W/L-Effect", y = "")
 
