@@ -612,7 +612,7 @@ ggsave(plot = fig2b,
 ### Global Parameters
 
 ```{r figure 3 left - plot global parameters for 17-19}
-data_path <- here("results_2025/lichess1700-1900")
+data_path <- here("results/lichess1700-1900_2025")
 
 fit_17_19_bullet_prev <- readRDS(file = 
                                    paste0(data_path,
@@ -1341,7 +1341,7 @@ procedures.
 
 ```{r perm for 17-19}
 #| eval: false
-perm_data_path <- here("results/lichess1700-1900/perm")
+perm_data_path <- here("results/lichess1700-1900_2025/perm")
 
 path_id <- 1
 data_path <- res_data_path[path_id]
@@ -1353,10 +1353,12 @@ perm_17_19 <- perm_files[1:1000] |>
 sim_pars <- perm_17_19 |>
   select(variable, mean, sim_id)
 
-fit_17_19_bullet_prev <- readRDS(file = paste0(
-  data_path,
-  "/all_rated_bullet_model_prev.RDS"
-))
+data_path <- here("results/lichess1700-1900_2025")
+
+fit_17_19_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
 
 bullet_17_19 <- readRDS(file = paste0(
   data_path,
@@ -1397,32 +1399,6 @@ ggsave(
 
 
 ```{r figure 8 left - perm winner effects}
-## get the selected users for this, top 20 players
-path_id <- 1  ## for 1700-1900
-data_path <- all_data_path[path_id]
-files <- list.files(data_path)
-
-lichess_data <- files |> 
-  map_dfr(~read_player(data_path, .x))
-
-bullet_data <- lichess_data |> 
-  mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "60+0") |>
-  filter(Variant == "Standard") |>
-  filter(grepl("rated bullet game", Event))
-
-select_users <- bullet_data |> 
-  group_by(Username) |> 
-  tally() |> 
-  arrange(-n) |> 
-  ## will change this to n = 20 when run on cluster potentially
-  slice_max(order = n, n = 20) |> 
-  pull(Username)
-
-## then repeat for the winner effects
-player_id <- as_tibble(select_users) |> 
-  mutate(id = row_number()) |> 
-  rename(player_name = value)
 
 player_pars <- sim_pars |> 
   as_draws_df() |> 
@@ -1453,10 +1429,13 @@ levels <- true_beta |>
   arrange(mean) |> 
   pull(player_name)
   
+
 true_vals <- true_beta |> 
   filter(param == 2) |>  
-  mutate(y = row_number() - 0.5,
-         yend = y + 1)
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
   
 perm_17_19_winner <- player_pars |> 
   filter(param == 2) |>
@@ -1464,7 +1443,7 @@ perm_17_19_winner <- player_pars |>
   ggplot(aes(x = mean, y = y)) +
   stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
   geom_segment(data = true_vals, 
-               aes(x = mean, y = y, yend = yend), col = "red") +
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
   labs(y = "", x = "Estimated W/L-Effect") +
   theme_single_y()
 
@@ -1482,7 +1461,7 @@ ggsave(plot = perm_17_19_winner,
 
 
 ```{r figure 8 right}
-perm_data_path <- here("results/lichessGrandmasters/perm/")
+perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
 
 ## read all the files in this directory
 perm_files <- list.files(perm_data_path)
@@ -1578,8 +1557,10 @@ levels <- true_beta |>
 
 true_vals <- true_beta |> 
   filter(param == 1) |>  
-  mutate(y = row_number() - 0.5,
-         yend = y + 1)
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
 
 perm_gm_player <- player_pars |> 
   filter(param == 1) |>
@@ -1587,7 +1568,7 @@ perm_gm_player <- player_pars |>
   ggplot(aes(x = mean, y = y)) +
   stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
   geom_segment(data = true_vals, 
-               aes(x = mean, y = y, yend = yend), col = "red") +
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
   theme_single_y() +
   labs(x = "Estimated Player Effect", y = "")
 
