@@ -40,7 +40,7 @@ all_save_path[2] <- here("results/lichess2000-2200_2025/")
 all_save_path[3] <- here("results/lichess2300-2500_2025/")
 all_save_path[4] <- here("results/lichessGrandmasters_2025/")
 
-path_id <- 1 ## setting it for now
+path_id <- 4 ## setting it for now
 data_path <- all_data_path[path_id]
 save_path <- paste0(all_save_path[path_id], "perm/")
 
