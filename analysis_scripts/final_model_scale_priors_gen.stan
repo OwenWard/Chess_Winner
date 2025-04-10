@@ -28,7 +28,6 @@ data {
 
 
 parameters {
-  real mu_beta;                        // population average winner effect
   vector[2] nu;                        // location of beta[ , j]
   vector<lower=0>[2] tau;              // scale of beta[ , j], sd of effects
   cholesky_factor_corr[2] L_Omega;     // Cholesky of correlation of beta[ , j]
@@ -42,17 +41,17 @@ parameters {
 transformed parameters {
   matrix[2, J] beta = rep_matrix(nu, J)
                       + diag_pre_multiply(tau, L_Omega) * beta_std;
+  real mu_beta = nu[2];                // population winner effect
 }
 
 model {
-  mu_beta ~ normal(0, sigma_1);        // prior for population winner effect
-  sigma_g1 ~ normal(0, 1);          // prior for sd of gamma1
-  sigma_g2 ~ normal(0, 1);          // prior for sd of gamma2
+  sigma_g1 ~ normal(0, 1);             // prior for sd of gamma1
+  sigma_g2 ~ normal(0, 1);             // prior for sd of gamma2
   gamma1 ~ normal(0, sigma_g1);        // prior for gamma1
   gamma2 ~ normal(0, sigma_g2);        // prior for gamma2
   sigma_1 ~ normal(0, 1);
   nu[1] ~ normal(0, 1);
-  nu[2] ~ normal(mu_beta, 1);          // standardized so sds here fixed
+  nu[2] ~ normal(0, sigma_1);          // prior for population winner effect
   tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
   L_Omega ~ lkj_corr_cholesky(2);      // prior for correlation matrix
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
