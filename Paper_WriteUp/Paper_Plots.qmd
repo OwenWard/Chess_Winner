@@ -1,0 +1,1826 @@
+---
+title: "Paper Analysis"
+author: Owen G. Ward
+date: today
+format: 
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
+---
+
+This document will recreate all numeric and graphical
+summaries contained in the submitted manuscript and the 
+supplementary materials.
+
+```{r setup}
+#| include: false
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.width = 7, dev = "png", fig.path = "output/",
+                      fig.height = 5, dpi = 600)
+
+library(tidyverse)
+library(RcppRoll)
+library(cmdstanr)
+library(posterior)
+library(bayesplot)
+library(loo)
+library(scales)
+library(ggridges)
+library(here)
+library(ggdist)
+library(viridis)
+library(PlayerRatings)
+library(ggrepel)
+library(ggpubr)
+options(mc.cores = parallel::detectCores())
+theme_set(theme_bw())
+
+
+## to load some plot defaults
+source(here("utils", "helper.R"))
+source(here("utils", "plot_templates.R"))
+
+all_data_path <- rep(NA, 4)
+all_data_path[1] <- here("box_data/lichess1700-1900/")
+all_data_path[2] <- here("box_data/lichess2000-2200/")
+all_data_path[3] <- here("box_data/lichess2300-2500/")
+all_data_path[4] <- here("box_data/lichessGrandmasters/")
+res_data_path <- rep(NA, 4)
+res_data_path[1] <- here("results_2025/lichess1700-1900/")
+res_data_path[2] <- here("results_2025/lichess2000-2200/")
+res_data_path[3] <- here("results_2025/lichess2300-2500/")
+res_data_path[4] <- here("results_2025/lichessGrandmasters/")
+
+```
+
+
+# Section 2: Data 
+
+We first get some summary statistics about the overall data. 
+We construct these for the 1700-1900 players and GMs.
+We then examine the number of consecutive games played 
+across both cohorts.
+
+```{r summary statistics 1700-1900}
+#| eval: false
+## this can be run if interested
+path_id <- 1  ## for 1700-1900 
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+## overall summary of all event types
+lichess_data |> 
+  group_by(Event) |> 
+  count() |> 
+  arrange(-n)
+
+## what proportion of bullet games are of what time format
+lichess_data |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated bullet game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+## repeat for blitz games instead
+lichess_data |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+bullet_data <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated bullet game", Event))
+
+bullet_data |> nrow()
+## average number, we remove the two accounts with 1 and 3 games only
+## throughout we do not consider those who play less than 10 games
+## at a given format when fitting any model
+bullet_data |> 
+  group_by(Username) |> 
+  count() |> 
+  filter(n > 10) |> # remove 2 players with <10 games
+  ungroup() |> 
+  summarise(avg = mean(n))
+
+
+
+## for each player, count how many times they start
+## a game with 5 minutes of the start of a previous game
+## and get the proportion across all focal players
+ bullet_data |>  
+   group_by(Username) |> 
+   dplyr::select(Username, UTCDate, UTCTime) |> 
+   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+   group_by(Username) |> 
+   arrange(date_time) |> 
+   mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+   mutate(less_5 = ifelse(gap_seconds <= 300, TRUE, FALSE)) |> 
+   ungroup() |>   ## to get the overall proportion
+   summarise(sum(less_5, na.rm = TRUE)/ n()) 
+
+blitz_data <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "180+0") |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated blitz game", Event))
+
+## count how many blitz games they play as comparison
+
+blitz_data |> 
+  group_by(Username) |> 
+  count() |> 
+  filter(n > 10) |> # remove players with < 10 games
+  ungroup() |> 
+  summarise(avg = mean(n))
+
+## repeat for blitz data using 7 minutes as the maximum gap
+blitz_data |>  
+   group_by(Username) |> 
+   dplyr::select(Username, UTCDate, UTCTime) |> 
+   mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+   group_by(Username) |> 
+   arrange(date_time) |> 
+   mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+   mutate(less_7 = ifelse(gap_seconds <= 420, TRUE, FALSE)) |> 
+   ungroup() |>   ## to get the overall proportion
+   summarise(sum(less_7, na.rm = TRUE)/ n()) 
+
+## examine how many games are played in a session for the bullet data
+## look at the streaks, number of games played in a session
+outcomes <- bullet_data |> 
+  # group_by(Username) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_3 = if_else(gap_seconds <= 180, TRUE, FALSE, missing = FALSE)) 
+
+# Apply function to each group
+result <- outcomes |> 
+  summarise(session_length = list(get_true_sequences(less_3)))
+
+result |> 
+  unnest_longer(session_length) |> 
+  summarise(med_session = median(session_length), 
+            avg = mean(session_length))
+
+## plot the histogram of games per session
+result |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+## proportion of sessions with more than 1 game
+result |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+## with more than 10 games
+result |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 10, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+## repeat for blitz games
+outcomes_blitz <- blitz_data |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_7 = if_else(gap_seconds <= 420, TRUE, FALSE, missing = FALSE)) 
+
+result_blitz <- outcomes_blitz |> 
+  summarise(session_length = list(get_true_sequences(less_7)))
+
+result_blitz |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+```
+
+
+```{r summary statistics gm}
+#| eval: false
+## can be run if interested
+## then repeat this analysis for the gms
+path_id <- 4  ## for GMs
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+lichess_data_gm <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+## get proportion of bullet games that are of each time format
+lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated bullet game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+## repeat for blitz
+lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+bullet_data_gm <- lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "60+0") |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated bullet game", Event))
+
+bullet_data_gm |> nrow()
+bullet_data_gm |> 
+  group_by(Termination) |>
+  tally() |> 
+  mutate(prop = n/sum(n))
+
+## average across all focal players
+bullet_data_gm |> 
+  group_by(Username) |> 
+  count() |> 
+  ungroup() |> 
+  summarise(mean(n))
+
+blitz_data_gm <- lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "180+0") |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated blitz game", Event))
+
+blitz_data_gm |> 
+  group_by(Username) |> 
+  count() |> 
+  ungroup() |> 
+  summarise(mean(n))
+
+## get the average rating of the GMs at the time data
+## was collected 
+lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(Username) |> 
+  arrange(UTCDate, UTCTime) |> 
+  slice_tail(n = 1) |> 
+  mutate(user_elo = ifelse(Username == White, WhiteElo, BlackElo)) |> 
+  dplyr::select(Username, White, Black, WhiteElo, BlackElo, user_elo) |>
+  ungroup() |> 
+  summarise(mean(user_elo))
+
+## look at the proportion of games started within 5 minutes 
+## of the previous game
+bullet_data_gm |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_5 = ifelse(gap_seconds <= 300, TRUE, FALSE)) |> 
+  ungroup() |>   ## to get the overall proportion
+  summarise(sum(less_5, na.rm = TRUE)/ n()) 
+
+## look at the streaks, number of games played in a session
+outcomes_gm <- bullet_data_gm |> 
+  # group_by(Username) |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_5 = if_else(gap_seconds <= 300, TRUE, FALSE, missing = FALSE)) 
+
+## extract the sessions containing more than 1 game
+get_true_sequences <- function(x) {
+  rle_x <- rle(x)
+  true_lengths <- rle_x$lengths[rle_x$values == TRUE]
+  return(true_lengths)
+}
+
+# Apply function to each group
+result_gm <- outcomes_gm |> 
+  summarise(session_length = list(get_true_sequences(less_5)))
+
+result_gm |> 
+  unnest_longer(session_length) |> 
+  summarise(med_session = median(session_length), 
+            avg = mean(session_length))
+
+## plot the histogram of games per session
+result_gm |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+## proportion of sessions with more than 1 game
+result_gm |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+result_gm |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 10, TRUE, FALSE)) |>  
+  summarise(sum(multiple)/n())
+
+## repeat for blitz
+outcomes_blitz <- blitz_data_gm |> 
+  dplyr::select(Username, UTCDate, UTCTime) |> 
+  mutate(date_time = ymd_hms(paste(UTCDate, UTCTime))) |> 
+  group_by(Username) |> 
+  arrange(date_time) |> 
+  mutate(gap = date_time - lag(date_time),
+         gap_seconds = as.numeric(gap)) |> 
+  mutate(less_7_min = if_else(gap_seconds <= 420, TRUE, FALSE, FALSE)) 
+
+# Apply function to each group
+result_blitz <- outcomes_blitz |>
+  summarise(session_length = list(get_true_sequences(less_7_min)))
+
+result_blitz |> 
+  unnest_longer(session_length) |> 
+  ggplot(aes(session_length)) +
+  geom_histogram() 
+
+result_blitz |> 
+  unnest_longer(session_length) |> 
+  mutate(multiple = if_else(session_length > 1, TRUE, FALSE)) |> 
+  # group_by(Username) |> 
+  summarise(sum(multiple)/n())
+
+```
+
+```{r figure 1}
+## Sydney's code for this figure
+
+player_cohort_1 <- "sandro2502"
+
+path_id <- 1  ## for 1700-1900 
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+bullet_data_fig_1 <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated bullet game", Event))
+rm(lichess_data)
+
+p1 <- bullet_data |> 
+  filter(Username == player_cohort_1)
+
+p1$newELO <- ifelse(p1$White == paste0(player_cohort_1),
+                    p1$WhiteElo, p1$BlackElo)
+# p1$datetime <- as.POSIXct(paste(p1$UTCDate, p1$UTCTime),
+#                           format = "%Y.%m.%d %H:%M:%S")
+ltypes <- c(1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3)
+thetitle <- paste0("Player From 1700-1900 Cohort")
+linewd <- 1
+ylim1 <- 1200
+ylim2 <- 3500
+ndays <- 1
+
+p1_sorted <- p1 |> arrange(UTCDate, UTCTime)
+p1_sorted$event <- 1:nrow(p1_sorted)
+
+tidy_plot1 <- ggplot(p1_sorted, aes(x = event, y = newELO)) +
+  # scale_colour_manual(values = getPalette(colourCount)) +
+  scale_linetype_manual(values = ltypes) +
+  xlab("Games Played") +
+  ylab("Lichess Rating") +
+  ggtitle(thetitle) +
+  ylim(ylim1, ylim2) +
+  geom_line(lwd = linewd) +
+  theme(
+    plot.title = element_text(hjust = 0, vjust = 1, size = rel(1.7)),
+    panel.background = element_blank(),
+    plot.background = element_blank(),
+    panel.grid.major.y = element_line(color = "gray75", linetype = "dotted"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = rel(1.1)),
+    text = element_text(color = "gray20", size = 10),
+    axis.text = element_text(size = rel(1.0)),
+    axis.text.x = element_text(color = "gray20", size = rel(1.0)),
+    axis.text.y = element_text(color = "gray20", size = rel(1.0)),
+    axis.title.x = element_text(size = rel(1.0), vjust = 0),
+    axis.title.y = element_text(size = rel(1.0), vjust = 1),
+    axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "none"
+  )
+
+
+player_cohort_gm <- "alireza2003"
+
+## load in the GM data for this
+path_id <- 4  ## for GM 
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+bullet_data_fig_1_gm <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(Variant == "Standard") |>
+  filter(grepl("rated bullet game", Event))
+rm(lichess_data)
+
+p2 <- bullet_data_fig_1_gm |> 
+  filter(Username == player_cohort_gm)
+
+p2$newELO <- ifelse(p2$White == paste0(player_cohort_gm),
+                    p2$WhiteElo, p2$BlackElo)
+thetitle <- paste0("Player From GM Cohort")
+p2_sorted <- p2 |> arrange(UTCDate, UTCTime)
+p2_sorted$event <- 1:nrow(p2_sorted)
+
+tidy_plot2 <- ggplot(p2_sorted, aes(x = event, y = newELO)) +
+  # scale_colour_manual(values = getPalette(colourCount)) +
+  scale_linetype_manual(values = ltypes) +
+  xlab("Games Played") +
+  ylab("Lichess Rating") +
+  ggtitle(thetitle) +
+  ylim(ylim1, ylim2) +
+  geom_line(lwd = linewd) +
+  theme(
+    plot.title = element_text(hjust = 0, vjust = 1, size = rel(1.7)),
+    panel.background = element_blank(),
+    plot.background = element_blank(),
+    panel.grid.major.y = element_line(color = "gray75", linetype = "dotted"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = rel(1.1)),
+    text = element_text(color = "gray20", size = 10),
+    axis.text = element_text(size = rel(1.0)),
+    axis.text.x = element_text(color = "gray20", size = rel(1.0)),
+    axis.text.y = element_text(color = "gray20", size = rel(1.0)),
+    axis.title.x = element_text(size = rel(1.0), vjust = 0),
+    axis.title.y = element_text(size = rel(1.0), vjust = 1),
+    # axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "none"
+  )
+
+tdy1 <- tidy_plot1 + theme_single_y()
+tdy2 <- tidy_plot2 + theme_single_y()
+
+tidy_plot <- ggarrange(tdy1, tdy2)
+
+ggsave(paste0(newfilename, ".png"), tidy_plot,
+  dpi = 600, height = 5, width = 12
+)
+ggsave(plot = tidy_plot, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "elo_plot_2_players.png")), dpi = 600,
+       height = 5, width = 12)
+```
+
+
+```{r figure 2}
+## Adam's code for this figure
+
+gm_players_elo <- list()
+gm_session_lengths <- list()
+gm_time_diffs <- list()
+gm_time_diffs_10 <- list()
+
+gm_players <- unique(bullet_data_gm$Username)
+
+for (i in 1:length(gm_players)) {
+  tidy_games_gms <- bullet_data_gm |>
+    filter(Username == gm_players[i]) |> # select only one player
+    mutate(UTCDateTime = ymd_hms(paste(UTCDate, UTCTime))) |> # convert date-time to lubridate type
+    arrange(UTCDateTime) |> # order date-time
+    mutate(time_diff = UTCDateTime - lag(UTCDateTime)) # time difference between games
+  
+  ## A check to remove duplicated games, if they occur
+  # cat("Dupes:", sum(duplicated(tidy_games_gms[1:9])), "\n", sep = " ")
+  # # some players have all their games double recorded for some reason
+  # tidy_games_gms <- tidy_games_gms[!duplicated(tidy_games_gms[1:9]), ] # remove duplicate rows
+
+  # get players average elo across all games
+  gm_players_elo[[gm_players[i]]] <- mean(c(
+    tidy_games_gms$WhiteElo[gm_players[i] == tidy_games_gms$White],
+    tidy_games_gms$BlackElo[gm_players[i] == tidy_games_gms$Black]
+  ))
+
+  # store time diffs between games
+  gm_time_diffs[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
+    lag(tidy_games_gms$UTCDateTime),
+    units = "secs"
+  ) # time between current game and previous
+  gm_time_diffs_10[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
+    lag(tidy_games_gms$UTCDateTime, 10),
+    units = "secs"
+  ) # time between current game and 10th game ago
+}
+# store in df for plotting
+gm_time_diff_df <- data.frame("time_diff" = unlist(gm_time_diffs))
+gm_time_diff_df_10 <- data.frame("time_diff" = unlist(gm_time_diffs_10))
+
+## Same distributions as amateurs, so again proceed by assuming all 
+## games played within 300 seconds (5 min) are in the same session
+for (i in 1:length(gm_players)) {
+  tidy_games_gms <- bullet_data_gm |>
+    filter(Username == gm_players[i]) |> # select only one player
+    mutate(UTCDateTime = ymd_hms(paste(UTCDate, UTCTime))) |> # convert date-time to lubridate type
+    arrange(UTCDateTime) |> # order date-time
+    mutate(time_diff = UTCDateTime - lag(UTCDateTime)) # time difference between games
+
+  length_of_sessions <- which(tidy_games_gms$time_diff > 300) - 
+    lag(which(tidy_games_gms$time_diff > 300), default = 0)
+  # game id of first game of session minus game id of first game of previous session
+
+  gm_session_lengths[[gm_players[i]]] <- length_of_sessions # store
+}
+# store in df for plotting
+gm_session_lengths_df <- data.frame(session_length = unlist(gm_session_lengths))
+
+log_time_diff_plot_gm <- ggplot(gm_time_diff_df, aes(x = as.numeric(time_diff))) +
+  geom_histogram() +
+  scale_x_continuous(
+    trans = scales::log_trans(),
+    breaks = c(1, 60, 300, 3600, 86400, 31536000),
+    labels = c("1 sec", "1 min", "5 min", "1 hour", "1 day", "1 year")
+  ) +
+  xlab("Time Between Games (Log Scale)") +
+  geom_vline(xintercept = 300, colour = "red") +
+  ylab("Frequency") #+ ggtitle("Time Difference Between Current Game and Previous Game for Amateurs")
+fig2a <- log_time_diff_plot_gm + theme_single()
+
+ggsave(plot = fig2a, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "time_between_games_gm.png")), dpi = 600,
+       height = 5, width = 7)
+
+
+session_length_plot_gm <- ggplot(gm_session_lengths_df, aes(x = session_length)) +
+  geom_histogram() +
+  scale_x_continuous(
+    trans = pseudo_log_trans(sigma = 2.36),
+    breaks = c(1, 5, 10, 100),
+    labels = c("1 game", "5 games", "10 games", "100 games"),
+    limits = c(0, 389)
+  ) +
+  xlab("Number of Games in a Session (Log Scale)") +
+  ylab("Frequency") #+ ggtitle("Number of Games per Session for GMs")
+fig2b <- session_length_plot_gm + theme_single() 
+
+ggsave(plot = fig2b, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "session_length_gm.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+# Section 4: The Fitted Model
+
+
+## 1700-1900 Previous Game
+
+### Global Parameters
+
+```{r figure 3 left - plot global parameters for 17-19}
+data_path <- here("results/lichess1700-1900_2025")
+
+fit_17_19_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
+
+bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+
+facet_labels <- as_labeller(c(
+  mu_beta = "mu[beta]",
+  gamma1 = "gamma[1]",
+  gamma2 = "gamma[2]",
+  sigma_1 = "sigma[1]",
+  `tau[1]` = "tau[1]",
+  `tau[2]` = "tau[2]",
+  sigma_g1 = "sigma[g[1]]",
+  sigma_g2 = "sigma[g[2]]"
+), label_parsed)
+
+global_17_19_bullet_prev <- fit_17_19_bullet_prev$draws(c("mu_beta",
+                                                          "gamma1", "gamma2",
+                           "sigma_1", "tau[1]", "tau[2]",
+                           "sigma_g1", "sigma_g2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  ggplot(aes(value)) +
+  geom_histogram() +
+  facet_wrap(~name, ncol = 4, scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank()) +
+  theme_4col() +
+  scale_x_continuous(breaks = breaks_pretty(n = 3))
+
+global_17_19_bullet_prev
+ggsave(plot = global_17_19_bullet_prev, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "17_19_prev_global.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+```{r interpret the estimated coefficients 17-19}
+#| eval: false
+gamma_ests <- fit_17_19_bullet_prev$summary(variables = 
+                                              c("gamma1",
+                                                "gamma2")) |> 
+  pull(mean)
+## compute change in win probability for gamma1
+1/(1 + exp(-1 * (0)))
+1/(1 + exp(-1 * (gamma_ests[1])))
+
+1/(1 + exp(-1 * (0))) ## equally rated, playing as black
+1/(1 + exp(-1 * (100 * gamma_ests[2])))
+```
+
+
+
+### Winner and Player Effects
+
+```{r player level parameters for 17-19}
+#| eval: false
+
+player_id <- as_tibble(bullet_17_19) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+  
+player_pars <- fit_17_19_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id")
+
+## see what the smallest and largest posterior mean is 
+## for the winner effects
+player_pars |> 
+  group_by(player_name, param) |> 
+  summarise(post_mean = mean(value)) |> 
+  filter(param == 2) |> 
+  ungroup() |> 
+  slice_max(order_by = post_mean, n = 5)
+
+player_pars |> 
+  group_by(player_name, param) |> 
+  summarise(post_mean = mean(value)) |> 
+  filter(param == 2) |> 
+  ungroup() |> 
+  slice_min(order_by = post_mean, n = 5)
+
+## see how many contain 0
+player_pars |> 
+  group_by(player_name, param) |> 
+  filter(param == 2) |> 
+  summarise(lower = quantile(value, prob = 0.025),
+            upper = quantile(value, prob = 0.975)) |> 
+  mutate(contain_zero = ifelse(upper > 0 & lower < 0,
+                         1, 0)) |> 
+  filter(contain_zero == 0)
+```
+
+```{r figure 4 left}
+winner_plot_17_19 <- player_pars |> 
+  filter(param == 2) |> 
+  mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
+  ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
+  stat_histinterval() +
+  labs(x = "Change in Win Probability", y = element_blank(), 
+       title = "1700-1900 Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+ggsave(plot = winner_plot_17_19, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "17_19_prev_winner.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+```{r figure s4 left - plot player effects}
+#| eval: false
+indiv_plot_17_19 <- player_pars |> 
+  filter(param == 1) |> 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  stat_histinterval() +
+  labs(x = "Estimated Player Effect", y = element_blank(),
+       title = "1700-1900 Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+ggsave(plot = indiv_plot_17_19, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S4_left.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+
+
+## GM previous game
+
+### Global Parameters
+
+```{r figure 3 right - global parameters for gm data}
+data_path <- here("results_2025/lichessGrandmasters")
+
+fit_gm_bullet_prev <- 
+  readRDS(file = paste0(data_path,"/all_rated_bullet_model_prev_n1.RDS"))
+
+bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+
+global_gm_bullet_prev <- fit_gm_bullet_prev$draws(c("mu_beta",
+                                                          "gamma1", "gamma2",
+                           "sigma_1", "tau[1]", "tau[2]",
+                           "sigma_g1", "sigma_g2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+  ggplot(aes(value)) +
+  geom_histogram() +
+   facet_wrap(~name, ncol = 4, scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank()) +
+  theme_4col() +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) 
+
+global_gm_bullet_prev
+ggsave(plot = global_gm_bullet_prev, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "gm_prev_global.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+
+```{r interpret the estimated coefficients gm}
+#| eval: false
+gamma_ests_gm <- fit_gm_bullet_prev$summary(variables = c("gamma1",
+                                                          "gamma2")) |> 
+  pull(mean)
+## compute change in win probability for gamma1
+1/(1 + exp(-1 * (0)))
+1/(1 + exp(-1 * (gamma_ests_gm[1])))
+## change in win probability for elo difference
+1/(1 + exp(-1 * (0))) ## equally rated, playing as black
+1/(1 + exp(-1 * (100 * gamma_ests_gm[2])))
+```
+
+### Winner and Player Effects
+
+```{r figure 4 right - player level parameters for gm data}
+player_id <- as_tibble(bullet_gm) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+  
+player_pars <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id")
+
+## see what the smallest and largest posterior mean is 
+## for the winner effects
+player_pars |> 
+  group_by(player_name, param) |> 
+  summarise(post_mean = mean(value)) |> 
+  filter(param == 2) |> 
+  ungroup() |> 
+  slice_max(order_by = post_mean, n = 5)
+
+player_pars |> 
+  group_by(player_name, param) |> 
+  summarise(post_mean = mean(value)) |> 
+  filter(param == 2) |> 
+  ungroup() |> 
+  slice_min(order_by = post_mean, n = 5)
+
+## count how many intervals contain 0
+## see how many contain 0
+player_pars |> 
+  group_by(player_name, param) |> 
+  filter(param == 2) |> 
+  summarise(lower = quantile(value, prob = 0.025),
+            upper = quantile(value, prob = 0.975)) |> 
+  mutate(contain_zero = ifelse(upper > 0 & lower < 0,
+                         1, 0)) |> 
+  filter(contain_zero == 0)
+
+## then the winner effects plot
+winner_plot_gm <- player_pars |> 
+  filter(param == 2) |> 
+  mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |>
+  ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
+  stat_histinterval() +
+  labs(x = "Estimated W/L-Effect", y = element_blank(), 
+       title = "GM Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+winner_plot_gm
+
+ggsave(plot = winner_plot_gm, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "gm_prev_winner.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+
+```{r figure s4 right - plot player effects}
+#| eval: false
+## then repeat for player effects
+indiv_plot_gm <- player_pars |> 
+  filter(param == 1) |> 
+  ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
+  stat_histinterval() +
+  labs(x = "Estimated Player Effect", y = element_blank(), 
+       title = "GM Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+indiv_plot_gm
+
+ggsave(plot = indiv_plot_gm, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S4_right.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+
+```{r interpret changes in win probability for gm}
+#| eval: false
+## interpret the individual winner effects
+## assume wins 50% of all games
+1/(1 + exp(-1 * (0)))
+## if won previous
+1/(1 + exp(-1 * (0 + 0.216 * 0.5)))
+## if lost previous
+1/(1 + exp(-1 * (0 + 0.216 * - 0.5)))
+## what about if win probability overall was 40%
+1/(1 + exp(-1 * (0 + 0.216 * 0.6)))
+## 35%, pretty low
+1/(1 + exp(-1 * (0 + 0.216 * 0.65)))
+```
+
+
+## Other Comparisons
+
+## GM Prev vs Previous 10
+
+
+```{r figure 5 left - compare global params n-1 vs n-10}
+## global effects first
+data_path <- here("results_2025/lichessGrandmasters")
+fit_gm_bullet_10 <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+
+prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. Game")
+
+pre_10_pars <- fit_gm_bullet_10$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. 10 Games")
+
+hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |> 
+  ggplot(aes(x = value, color = model)) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+ggsave(plot = hist_comp_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "gm_comp_global.png")), dpi = 600,
+       height = 3.5, width = 7)
+```
+
+
+```{r}
+#| eval: false
+## TO DO - move to supplement
+## not required for a paper plot
+player_pars_pre <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  mutate(model = "Prev. Game")
+
+player_pars_pre_10 <- fit_gm_bullet_10$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  mutate(model = "Prev. 10 Games")
+
+hist_comp_winner <- player_pars_pre |> 
+  filter(param == 2) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_pre_10 |> filter(param == 2) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+hist_comp_winner
+  
+ggsave(plot = hist_comp_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "gm_comp_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+## check the proportion of 95% intervals which contain zero
+bind_rows(player_pars_pre, player_pars_pre_10) |> 
+  filter(param == 2) |> 
+  group_by(player_name, model) |> 
+  summarise(lower = quantile(value, prob = 0.025),
+            upper = quantile(value, prob = 0.975)) |> 
+  mutate(contain_zero = ifelse(upper > 0 & lower < 0,
+                         1, 0)) |> 
+  group_by(model) |> 
+  summarise(prop = sum(contain_zero)/ n())
+
+## do the effects change in direction
+bind_rows(player_pars_pre, player_pars_pre_10) |> 
+  filter(param == 2) |> 
+  group_by(player_name, model) |> 
+  summarise(lower = quantile(value, prob = 0.025),
+            upper = quantile(value, prob = 0.975)) |> 
+  mutate(contain_zero = ifelse(upper > 0 & lower < 0,
+                         1, 0)) |>
+  print(n = 50)
+
+## then player effects
+## should update this also
+hist_comp_player <- player_pars_pre |> 
+  filter(param == 1) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_pre_10 |> filter(param == 1) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+  
+hist_comp_player
+ggsave(plot = hist_comp_player, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "gm_comp_player.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+
+
+## Bullet vs Blitz for 17-19
+
+Compare the global parameters and the winner effects here, using the
+previous game only.
+
+```{r bullet v blitz for 17-19}
+#| eval: false
+
+## Potential Supplement Plots
+data_path <- here("results_2025/lichess1700-1900")
+fit_17_19_bullet_prev <- readRDS(file = paste0(
+  data_path,
+  "/all_rated_bullet_model_prev_n1.RDS"
+))
+bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+fit_17_19_blitz_prev <- readRDS(file = paste0(
+  data_path,
+  "/all_rated_blitz_model_prev_n1.RDS"
+))
+blitz_17_19 <- readRDS(file = paste0(data_path, "/users_blitz.RDS"))
+
+player_id_17_19 <- as_tibble(bullet_17_19) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+
+## compare global effects first
+bullet_pars <- fit_17_19_bullet_prev$draws(c(
+  "mu_beta",
+  "gamma1", "gamma2"
+)) |>
+  as_draws_df() |>
+  pivot_longer(cols = "mu_beta":"gamma2") |>
+  mutate(model = "Bullet")
+
+blitz_pars <- fit_17_19_blitz_prev$draws(c(
+  "mu_beta",
+  "gamma1", "gamma2"
+)) |>
+  as_draws_df() |>
+  pivot_longer(cols = "mu_beta":"gamma2") |>
+  mutate(model = "Blitz")
+
+bul_blit_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
+  ggplot(aes(value, color = model))  +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+bul_blit_comp_global
+
+ggsave(plot = bul_blit_comp_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "bul_blitz_comp_17_19_global.png")), dpi = 600,
+       height = 5, width = 7)
+
+## then repeat for winner and player effects
+player_pars_bullet <- fit_17_19_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id_17_19, by = "id") |> 
+  mutate(model = "Bullet")
+
+player_pars_blitz <- fit_17_19_blitz_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id_17_19, by = "id") |> 
+  mutate(model = "Blitz")
+
+## need to keep only players which are in both 
+## bullet and blitz
+
+common_players <- intersect(unique(player_pars_bullet$player_name),
+                            unique(player_pars_blitz$player_name))
+
+comp_17_19_winner <- player_pars_bullet |> 
+  filter(param == 2) |> 
+  filter(player_name %in% common_players) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_blitz |>
+              filter(param == 2) |>
+              filter(player_name %in% common_players) |>
+              mutate(y = as.factor(player_name))) |>
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+comp_17_19_winner
+
+ggsave(plot = comp_17_19_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "bul_blitz_comp_17_19_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+comp_17_19_player <- player_pars_bullet |> 
+  filter(param == 1) |> 
+  filter(player_name %in% common_players) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_blitz |>
+              filter(param == 1) |>
+              filter(player_name %in% common_players) |>
+              mutate(y = as.factor(player_name))) |>
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+comp_17_19_player
+
+ggsave(plot = comp_17_19_player, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "bul_blitz_comp_17_19_player.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+
+## Bullet vs Blitz for GM
+
+
+```{r figure 5 right - bullet v blitz gm}
+data_path <- here("results_2025/lichessGrandmasters")
+fit_gm_bullet_prev <- readRDS(file = paste0(
+  data_path,
+  "/all_rated_bullet_model_prev_n1.RDS"
+))
+bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+fit_gm_blitz_prev <- readRDS(file = paste0(
+  data_path,
+  "/all_rated_blitz_model_prev_n1.RDS"
+))
+blitz_gm <- readRDS(file = paste0(data_path, "/users_blitz.RDS"))
+## compare global effects first
+bullet_pars <- fit_gm_bullet_prev$draws(c(
+  "mu_beta",
+  "gamma1", "gamma2"
+)) |>
+  as_draws_df() |>
+  pivot_longer(cols = "mu_beta":"gamma2") |>
+  mutate(model = "Bullet")
+
+blitz_pars <- fit_gm_blitz_prev$draws(c(
+  "mu_beta",
+  "gamma1", "gamma2"
+)) |>
+  as_draws_df() |>
+  pivot_longer(cols = "mu_beta":"gamma2") |>
+  mutate(model = "Blitz")
+
+bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
+  ggplot(aes(x = value, y = name, color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  facet_wrap(~name,
+    scales = "free",
+    labeller = labeller(name = facet_labels)
+  ) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+bul_blit_gm_comp_global
+
+ggsave(
+  plot = bul_blit_gm_comp_global,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "bul_blitz_comp_gm_global.png"
+  )), dpi = 600,
+  height = 3.5, width = 7
+)
+```
+
+
+```{r figure 6 - comparison between bullet and blitz winner}
+## then repeat for winner and player effects
+player_id <- as_tibble(bullet_gm) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+
+player_pars_bullet <- fit_gm_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  mutate(model = "Bullet")
+
+player_pars_blitz <- fit_gm_blitz_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  mutate(model = "Blitz")
+
+comp_gm_winner <- player_pars_bullet |> 
+  filter(param == 2) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_blitz |> 
+              filter(param == 2) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
+  scale_color_viridis_d(option = "H")
+
+comp_gm_winner
+ggsave(plot = comp_gm_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "bul_blitz_comp_gm_winner.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+```{r}
+#| eval: false
+## player effects also
+comp_gm_player <- player_pars_bullet |> 
+  filter(param == 1) |> 
+  mutate(y = reorder(player_name, value, FUN = median)) |> 
+  bind_rows(player_pars_blitz |> 
+              filter(param == 1) |> 
+              mutate(y = as.factor(player_name))) |> 
+  ggplot(aes(x = value, y = y,
+             color = model)) +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_single_y() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
+  scale_color_viridis_d(option = "H")
+
+comp_gm_player
+
+ggsave(plot = comp_gm_player, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "bul_blitz_comp_gm_player.png")), dpi = 600,
+       height = 5, width = 7)
+```
+
+
+
+# Section 5: Model Validation
+
+We currently have two initial model checking 
+procedures.
+
+
+### Permuting for 1700-1900
+
+```{r perm for 17-19}
+#| eval: false
+perm_data_path <- here("results/lichess1700-1900_2025/perm")
+
+path_id <- 1
+data_path <- res_data_path[path_id]
+(perm_files <- list.files(perm_data_path))
+
+perm_17_19 <- perm_files[1:1000] |>
+  map_dfr(~ read_rds(here(perm_data_path, .x)))
+
+sim_pars <- perm_17_19 |>
+  select(variable, mean, sim_id)
+
+data_path <- here("results/lichess1700-1900_2025")
+
+fit_17_19_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
+
+bullet_17_19 <- readRDS(file = paste0(
+  data_path,
+  "/users_bullet.RDS"
+))
+
+## then need to overlay the true values also
+true_values <- fit_17_19_bullet_prev$summary() |>
+  filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |>
+  select(variable, mean)
+
+perm_17_19_global <- sim_pars |>
+  filter(variable %in% c(
+    "mu_beta", "gamma1", "gamma2")) |>
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  facet_wrap(~variable, scales = "free") +
+  geom_vline(
+    data = true_values,
+    mapping = aes(xintercept = mean),
+    col = "red"
+  ) +
+  theme_3col() +
+  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
+  labs(x = element_blank(), y = element_blank())
+
+perm_17_19_global
+
+ggsave(
+  plot = perm_17_19_global,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "perm_17_19_global.png"
+  )), dpi = 600,
+  height = 5, width = 7
+)
+```
+
+
+```{r figure 8 left - perm winner effects}
+
+player_pars <- sim_pars |> 
+  as_draws_df() |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  drop_na() |> 
+  select(param, id, mean, sim_id) |> 
+  mutate(id = as.numeric(id)) |> 
+  left_join(player_id, by = "id")
+
+perm_players <- unique(player_pars$player_name)
+
+true_beta <- fit_17_19_bullet_prev$summary() |> 
+  filter(str_starts(variable, "beta\\[")) |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  select(param, id, mean) |> 
+  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  filter(player_name %in% perm_players)
+
+levels <- true_beta |> 
+  filter(param == 2) |> 
+  arrange(mean) |> 
+  pull(player_name)
+  
+
+true_vals <- true_beta |> 
+  filter(param == 2) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
+  
+perm_17_19_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  labs(y = "", x = "Estimated W/L-Effect") +
+  theme_single_y()
+
+ggsave(plot = perm_17_19_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_17_19_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+```
+
+
+## GMs
+
+### Permuting for GM Data
+
+
+```{r figure 8 right}
+perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
+
+## read all the files in this directory
+perm_files <- list.files(perm_data_path)
+
+perm_gm <- perm_files[1:1000] |> 
+  map_dfr(~read_rds(here(perm_data_path, .x)))
+
+sim_pars <- perm_gm |> 
+  select(variable, mean, sim_id) 
+
+## then need to overlay the true values also
+true_values <- fit_gm_bullet_prev$summary() |> 
+  dplyr::filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |> 
+  select(variable, mean)
+
+perm_gm_global <- sim_pars |> 
+  dplyr::filter(variable %in% c("mu_beta",  "gamma1", "gamma2")) |> 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  facet_wrap(~variable, scales = "free") +
+  geom_vline(data = true_values, mapping = aes(xintercept = mean),
+             col = "red") +
+  theme_3col() +
+  labs(x = element_blank(), y = element_blank())
+
+ggsave(plot = perm_gm_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_global.png")), dpi = 600,
+       height = 5, width = 7)
+
+## then repeat for the winner effects
+player_id <- as_tibble(bullet_gm) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+
+player_pars <- sim_pars |> 
+  as_draws_df() |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  drop_na() |> 
+  select(param, id, mean, sim_id) |> 
+  mutate(id = as.numeric(id)) |> 
+  left_join(player_id, by = "id")
+
+perm_players <- unique(player_pars$player_name)
+
+true_beta <- fit_gm_bullet_prev$summary() |> 
+  filter(str_starts(variable, "beta\\[")) |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  select(param, id, mean) |> 
+  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  filter(player_name %in% perm_players)
+
+levels <- true_beta |> 
+  filter(param == 2) |> 
+  arrange(mean) |> 
+  pull(player_name)
+
+true_vals <- true_beta |> 
+  filter(param == 2) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.25,
+         yend = row_number() + 0.25)
+
+perm_gm_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals,
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  theme_single_y() +
+  labs(x = "Estimated W/L-Effect", y = "")
+
+perm_gm_winner
+
+ggsave(plot = perm_gm_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+levels <- true_beta |> 
+  filter(param == 1) |> 
+  arrange(mean) |> 
+  pull(player_name)
+
+true_vals <- true_beta |> 
+  filter(param == 1) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
+
+perm_gm_player <- player_pars |> 
+  filter(param == 1) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  theme_single_y() +
+  labs(x = "Estimated Player Effect", y = "")
+
+
+perm_gm_player
+
+ggsave(plot = perm_gm_player, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_player.png")), dpi = 600,
+       height = 5, width = 7)
+
+```
+
+
+<!-- TO DO - Tidy up below here -->
+
+## Posterior Predictive Plots
+
+```{r}
+
+```
+
+
+
+# Supplementary Material
+
+This contains all analysis and figures which are included in 
+the supplementary materials.
+
+
+## Additional Summary Information
+
+```{r}
+#| eval: false
+
+## how many times does a focal player play another focal player
+
+focal_17_19 <- unique(bullet_data$Username)
+
+bullet_data |> 
+  mutate(opponent = ifelse(Username == White, Black, White)) |> 
+  mutate(focal_opp = ifelse(opponent %in% focal_17_19, 1, 0)) |> 
+  select(Username, focal_opp) |> 
+  summarise(sum(focal_opp)/ n())
+  
+focal_gm <- unique(bullet_data_gm$Username)
+
+bullet_data_gm |> 
+  mutate(opponent = ifelse(Username == White, Black, White)) |> 
+  mutate(focal_opp = ifelse(opponent %in% focal_gm, 1, 0)) |> 
+  select(Username, focal_opp) |> 
+  summarise(sum(focal_opp)/ n())
+
+```
+
+## Results for Other Cohorts
+
+
+## 2000-2200 Previous Game Winner/Loser Effect
+
+```{r figure s1-left}
+#| eval: false
+data_path <- here("results_2025/lichess2000-2200")
+
+fit_20_22_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
+
+bullet_20_22 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+
+
+player_id <- as_tibble(bullet_20_22) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+  
+player_pars <- fit_20_22_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id")
+
+
+winner_plot_20_22 <- player_pars |> 
+  filter(param == 2) |> 
+  mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
+  ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
+  stat_histinterval() +
+  labs(x = "Change in Win Probability", y = element_blank(), 
+       title = "2000-2200 Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+ggsave(plot = winner_plot_20_22, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S1_left.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+
+## 2300-2500 Previous Game Winner/Loser Effect
+
+```{r figure-s1-right}
+#| eval: false
+data_path <- here("results_2025/lichess2300-2500")
+
+fit_23_25_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
+
+bullet_23_25 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
+
+
+player_id <- as_tibble(bullet_23_25) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+  
+player_pars <- fit_23_25_bullet_prev$draws() |> 
+  as_draws_df() |>
+  select(starts_with("beta[")) |>
+  pivot_longer(cols = everything()) |>
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  mutate(id = as.numeric(id),
+         param = as.numeric(param)) |> 
+  left_join(player_id, by = "id")
+
+
+winner_plot_23_25 <- player_pars |> 
+  filter(param == 2) |> 
+  mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
+  ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
+  stat_histinterval() +
+  labs(x = "Change in Win Probability", y = element_blank(), 
+       title = "2300-2500 Cohort") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y()
+
+ggsave(plot = winner_plot_23_25, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S1_right.png")), dpi = 600,
+       height = 7, width = 7)
+```
+
+
+
+## Fitting the Model with n=5 as History
+
+To be added here for 1700-1900 and GM cohorts.
+
+
+```{r figure S3 left}
+## global effects first
+data_path <- here("results_2025/lichess1700-1900")
+
+fit_17_19_bullet_5 <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n5.RDS"))
+
+fit_17_19_bullet_10 <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+
+prev_pars <- fit_17_19_bullet_prev$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. Game")
+
+pre_5_pars <- fit_17_19_bullet_5$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. 5 Games")
+
+pre_10_pars <- fit_17_19_bullet_10$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. 10 Games")
+
+hist_comp_global <- bind_rows(prev_pars, pre_5_pars, pre_10_pars) |> 
+  ggplot(aes(x = value, color = model)) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+ggsave(plot = hist_comp_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S3_left.png")), dpi = 600,
+       height = 3.5, width = 7)
+
+```
+
+
+```{r figure S3 right}
+## global effects first
+data_path <- here("results_2025/lichessGrandmasters")
+
+fit_gm_bullet_5 <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n5.RDS"))
+
+fit_gm_bullet_10 <- 
+  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+
+prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. Game")
+
+pre_5_pars <- fit_gm_bullet_5$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. 5 Games")
+
+pre_10_pars <- fit_gm_bullet_10$draws(c("mu_beta",
+                                        "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "Prev. 10 Games")
+
+hist_comp_global <- bind_rows(prev_pars, pre_5_pars, pre_10_pars) |> 
+  ggplot(aes(x = value, color = model)) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+ggsave(plot = hist_comp_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "Figure_S3_right.png")), dpi = 600,
+       height = 3.5, width = 7)
+
+```
+
