@@ -18,7 +18,7 @@ library(here)
 
 options(mc.cores = parallel::detectCores())
 
-source(here("analysis/helper.R"))
+source(here("utils", "helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
