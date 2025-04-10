@@ -28,7 +28,8 @@ data {
 
 
 parameters {
-  vector[2] nu;                        // location of beta[ , j]
+  // vector[2] nu;                        // location of beta[ , j]
+  real mu_beta;
   vector<lower=0>[2] tau;              // scale of beta[ , j], sd of effects
   cholesky_factor_corr[2] L_Omega;     // Cholesky of correlation of beta[ , j]
   matrix[2, J] beta_std;               // standard beta (beta - nu) / Sigma
@@ -39,9 +40,10 @@ parameters {
   real gamma2;                         // effect of elo difference
 }
 transformed parameters {
+  vector[2] nu = [0, mu_beta]';
   matrix[2, J] beta = rep_matrix(nu, J)
                       + diag_pre_multiply(tau, L_Omega) * beta_std;
-  real mu_beta = nu[2];                // population winner effect
+  // real mu_beta = nu[2];                // population winner effect
 }
 
 model {
@@ -50,8 +52,8 @@ model {
   gamma1 ~ normal(0, sigma_g1);        // prior for gamma1
   gamma2 ~ normal(0, sigma_g2);        // prior for gamma2
   sigma_1 ~ normal(0, 1);
-  nu[1] ~ normal(0, 1);
-  nu[2] ~ normal(0, sigma_1);          // prior for population winner effect
+  // nu[1] ~ normal(0, 1);
+  mu_beta ~ normal(0, sigma_1);          // prior for population winner effect
   tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
   L_Omega ~ lkj_corr_cholesky(2);      // prior for correlation matrix
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
