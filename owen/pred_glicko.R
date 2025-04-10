@@ -68,8 +68,6 @@ select_users <- small_data |>
 
 
 users <- select_users
-
-
 ## will use last 1000 games each user plays
 
 last_games <- small_data |> 
@@ -102,9 +100,6 @@ init_data <- tidy_games |>
 
 
 ## get their starting scores for each player
-
-
-
 ## then just pick the player from this data
 ## need to choose the focal id and format for the glicko2 function
 
@@ -117,7 +112,6 @@ focal_init <- init_data |> group_by(focal_user) |>
   mutate(focal_elo = ifelse(focal_user == White, WhiteElo, BlackElo)) |> 
   select(focal_user, focal_elo) |> 
   rename(Player = focal_user, Rating = focal_elo)
-
 
 
 glick_data <- init_data |>
@@ -135,8 +129,6 @@ glick_part1 <- glick_data |>
          opp = ifelse(focal_user == White, Black, White)) |> 
   select(index, focal_user, opp, focal_result, focal_white) |> 
   mutate(focal_white = ifelse(focal_white == 0, -1, focal_white))
-
-
 
 
 ## second argument, giving elo of all opponents and starting of first
@@ -218,31 +210,23 @@ draws <- fit_17_19_first$draws() |> as_draws_df() |>
   pivot_wider(names_from = param, values_from = value) |> 
   rename(beta1 = `1`, beta2 = `2`)
 
-
 ## the covariates for the future games
-
 future_games <- tibble(focal = as.character(init_data$focal_id),
                        color = init_data$focal_white,
                        elo_diff = init_data$elo_diff,
                        hist = init_data$ave_prop)
 
-
 ## process for below
-
 focal_games <- future_games |> 
   filter(focal == focal_player_used)
-
 
 full_game_info <- init_data |> 
   filter(focal_id == focal_player_used)
 
 # slow for even 100 sims at the moment, due to the for loop
 num_sims <- 100
-
 num_games <- nrow(full_game_info)
-
 glicko_sim <- data.frame(NA, nrow = num_games, ncol = num_sims)
-
 game_sim <- data.frame(NA, nrow = num_games, ncol = num_sims)
 
 
@@ -310,14 +294,9 @@ for(i in 1:num_games){
   
 }
 
-
 ## quick plot to confirm
-
 quick_sim <- glicko_sim[, 1:100]  
-
 colnames(quick_sim) <- paste0("Sim_", 1:100)
-
-
 quick_sim <- as_tibble(quick_sim) |> 
   mutate(game = row_number()) |> 
   pivot_longer(cols = Sim_1:Sim_100, names_to = "Sim",
