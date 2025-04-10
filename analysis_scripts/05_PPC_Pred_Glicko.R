@@ -11,7 +11,7 @@ library(ggplot2)
 library(posterior)
 library(RcppRoll)
 
-source(here("analysis/helper.R"))
+source(here("utils", "helper.R"))
 
 ## get some initial chess data, say the final 1000 games
 ## for 20 players and compute the ratings for that
