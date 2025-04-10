@@ -39,8 +39,8 @@ theme_set(theme_bw())
 
 
 ## to load some plot defaults
-source(here("analysis", "helper.R"))
-source(here("analysis", "plot_templates.R"))
+source(here("utils", "helper.R"))
+source(here("utils", "plot_templates.R"))
 
 all_data_path <- rep(NA, 4)
 all_data_path[1] <- here("box_data/lichess1700-1900/")

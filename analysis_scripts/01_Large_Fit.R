@@ -19,11 +19,11 @@ options(mc.cores = parallel::detectCores())
 
 ## source helper functions for reading and transforming data
 ## along with defaults for plots, etc
-source(here("analysis/helper.R"))
+source(here("utils/helper.R"))
 
 path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
-n <- 5 ## number of games to use for history
+n <- 10 ## number of games to use for history
 
 ### load in the data to use
 
@@ -33,14 +33,14 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results/lichess1700-1900_2025/")
+all_save_path[1] <- here("results_revision/lichess1700-1900/")
 
 # all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
 # ## if need to run it locally
 
-all_save_path[2] <- here("results/lichess2000-2200_2025/")
-all_save_path[3] <- here("results/lichess2300-2500_2025/")
-all_save_path[4] <- here("results/lichessGrandmasters_2025/")
+all_save_path[2] <- here("results_revision/lichess2000-2200/")
+all_save_path[3] <- here("results_revision/lichess2300-2500/")
+all_save_path[4] <- here("results_revision/lichessGrandmasters/")
 
 
 data_path <- all_data_path[path_id]
@@ -117,7 +117,7 @@ stan_data_ave <- list(N = nrow(init_data),
                       win_prop = init_data$ave_prop)
 
 
-stan_file <- here("owen", "cluster_scripts", "final_model_scale_priors.stan")
+stan_file <- here("analysis_scripts", "final_model_scale_priors.stan")
 
 mod <- cmdstan_model(stan_file)
 
