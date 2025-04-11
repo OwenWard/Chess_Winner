@@ -434,9 +434,20 @@ ggsave(plot = rating_plot,
 
 
 ```{r figure 2}
-## Adam's code for this figure
+#Adam - revised Apr 11, 2025
+#Adding numbers to y-axis
 
-gm_players_elo <- list()
+
+#import data from gm cohort
+data_path_gm = paste0(all_data_path[4], "/")
+files_gm = list.files(data_path_gm, pattern = ".csv")
+lichess_data_gm = files_gm %>%
+  map_dfr(~read_player(data_path_gm, .x))
+
+bullet_data_gm = lichess_data_gm |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "60+0", Variant == "Standard", Event == "rated bullet game")
+
 gm_session_lengths <- list()
 gm_time_diffs <- list()
 gm_time_diffs_10 <- list()
@@ -454,12 +465,6 @@ for (i in 1:length(gm_players)) {
   # cat("Dupes:", sum(duplicated(tidy_games_gms[1:9])), "\n", sep = " ")
   # # some players have all their games double recorded for some reason
   # tidy_games_gms <- tidy_games_gms[!duplicated(tidy_games_gms[1:9]), ] # remove duplicate rows
-
-  # get players average elo across all games
-  gm_players_elo[[gm_players[i]]] <- mean(c(
-    tidy_games_gms$WhiteElo[gm_players[i] == tidy_games_gms$White],
-    tidy_games_gms$BlackElo[gm_players[i] == tidy_games_gms$Black]
-  ))
 
   # store time diffs between games
   gm_time_diffs[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
@@ -503,7 +508,7 @@ log_time_diff_plot_gm <- ggplot(gm_time_diff_df, aes(x = as.numeric(time_diff)))
   xlab("Time Between Games (Log Scale)") +
   geom_vline(xintercept = 300, colour = "red") +
   ylab("Frequency") #+ ggtitle("Time Difference Between Current Game and Previous Game for Amateurs")
-fig2a <- log_time_diff_plot_gm + theme_single()
+fig2a <- log_time_diff_plot_gm + theme_single_y()
 
 ggsave(plot = fig2a, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
@@ -521,7 +526,7 @@ session_length_plot_gm <- ggplot(gm_session_lengths_df, aes(x = session_length))
   ) +
   xlab("Number of Games in a Session (Log Scale)") +
   ylab("Frequency") #+ ggtitle("Number of Games per Session for GMs")
-fig2b <- session_length_plot_gm + theme_single() 
+fig2b <- session_length_plot_gm + theme_single_y() 
 
 ggsave(plot = fig2b, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
