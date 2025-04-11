@@ -513,15 +513,15 @@ fig2a <- log_time_diff_plot_gm + theme_single_y()
 ggsave(plot = fig2a, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "time_between_games_gm.png")), dpi = 600,
-       height = 5, width = 7)
+       height = 4, width = 6.25)
 
 
 session_length_plot_gm <- ggplot(gm_session_lengths_df, aes(x = session_length)) +
   geom_histogram() +
   scale_x_continuous(
     trans = pseudo_log_trans(sigma = 2.36),
-    breaks = c(1, 5, 10, 100),
-    labels = c("1 game", "5 games", "10 games", "100 games"),
+    breaks = c(1, 10, 100),
+    labels = c("1 game", "10 games", "100 games"),
     limits = c(0, 389)
   ) +
   xlab("Number of Games in a Session (Log Scale)") +
@@ -531,7 +531,7 @@ fig2b <- session_length_plot_gm + theme_single_y()
 ggsave(plot = fig2b, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
                               "session_length_gm.png")), dpi = 600,
-       height = 5, width = 7)
+       height = 4, width = 6.25)
 ```
 
 
