@@ -47,6 +47,24 @@ theme_single_y <- function(){
     )
 }
 
+theme_single_y_legend <- function(){ 
+  theme_bw() %+replace%    #replace elements we want to change
+    
+    theme(
+      
+      #grid elements
+      panel.spacing.x = unit(1, "lines"),
+      
+      #text elements
+      plot.title = element_text(size = title_size),
+      axis.text = element_text(size = axis_text_size - 2),
+      axis.title = element_text(size = axis_title),
+      legend.text = element_text(size = 12),
+      strip.text = element_text(size = axis_title - 5, 
+                                margin = margin(1.5, 1.5, 2, 1.5)),
+      legend.title = element_blank(),
+    )
+}
 
 theme_3col <- function(){ 
   theme_bw() %+replace%    #replace elements we want to change
