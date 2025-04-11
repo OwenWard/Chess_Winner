@@ -377,133 +377,59 @@ result_blitz |>
 
 ```
 
+
 ```{r figure 1}
-## Sydney's code for this figure
+#Adam - Revised Apr 11, 2025
+#Updated to a single figure with 3 GMs and 3 1700-1900
+#Highlighting Magnus and Alireza 
 
-player_cohort_1 <- "sandro2502"
+#import data from 1700-1900 and gm cohorts
+data_path_gm = paste0(all_data_path[4], "/")
+data_path_17_19 = paste0(all_data_path[1], "/")
+files_gm = list.files(data_path_gm, pattern = ".csv")
+files_17_19 = list.files(data_path_17_19, pattern = ".csv")
 
-path_id <- 1  ## for 1700-1900 
-data_path <- all_data_path[path_id]
-files <- list.files(data_path)
-lichess_data <- files |> 
-  map_dfr(~read_player(data_path, .x))
+lichess_data_gm = files_gm %>%
+  map_dfr(~read_player(data_path_gm, .x))
+lichess_data_17_19 = files_17_19 %>%
+  map_dfr(~read_player(data_path_17_19, .x))
 
-bullet_data_fig_1 <- lichess_data |> 
-  mutate(Event = tolower(Event)) |>
-  filter(Variant == "Standard") |>
-  filter(grepl("rated bullet game", Event))
-rm(lichess_data)
+#combine cohorts
+lichess_data = rbind(lichess_data_17_19, lichess_data_gm)
 
-p1 <- bullet_data |> 
-  filter(Username == player_cohort_1)
+#selecting 3 users from each cohort that have around 10,000 games
+users = c("larrywheels", "SeanBambic", "dewang_007", #1700-1900s
+          "DrNykterstein", "alireza2003", "BlueGreensun") #gms
 
-p1$newELO <- ifelse(p1$White == paste0(player_cohort_1),
-                    p1$WhiteElo, p1$BlackElo)
-# p1$datetime <- as.POSIXct(paste(p1$UTCDate, p1$UTCTime),
-#                           format = "%Y.%m.%d %H:%M:%S")
-ltypes <- c(1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3)
-thetitle <- paste0("Player From 1700-1900 Cohort")
-linewd <- 1
-ylim1 <- 1200
-ylim2 <- 3500
-ndays <- 1
+#data for plot
+plot_data = lichess_data %>%
+  mutate(Event = tolower(Event)) %>%
+  filter(Event == "rated bullet game", Variant == "Standard", Username %in% users) %>%
+  mutate(focal_rating = ifelse(Username == White, WhiteElo, BlackElo)) %>%
+  group_by(Username) %>%
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
+  mutate(game = row_number(),
+         Username = case_when( #rename magnus and alireza usernames
+           Username == "DrNykterstein" ~ "DrNykterstein (Magnus Carlsen)",
+           Username == "alireza2003" ~ "alireza2003 (Alireza Firouzja)",
+           .default = Username
+         ),
+         Username = factor(Username, levels = c("DrNykterstein (Magnus Carlsen)", "alireza2003 (Alireza Firouzja)", 
+                                                "BlueGreensun", "SeanBambic", "dewang_007", "larrywheels"))) %>% #for order in legend
+  ungroup() %>%
+  select(Username, game, focal_rating)
+  
+#plotting
+rating_plot = ggplot(data = plot_data, mapping = aes(x = game, y = focal_rating, colour = Username)) +
+  geom_line() +
+  labs(x = "Games Played", y = "Rating") + 
+  theme_single_y_legend()
+rating_plot
 
-p1_sorted <- p1 |> arrange(UTCDate, UTCTime)
-p1_sorted$event <- 1:nrow(p1_sorted)
-
-tidy_plot1 <- ggplot(p1_sorted, aes(x = event, y = newELO)) +
-  # scale_colour_manual(values = getPalette(colourCount)) +
-  scale_linetype_manual(values = ltypes) +
-  xlab("Games Played") +
-  ylab("Lichess Rating") +
-  ggtitle(thetitle) +
-  ylim(ylim1, ylim2) +
-  geom_line(lwd = linewd) +
-  theme(
-    plot.title = element_text(hjust = 0, vjust = 1, size = rel(1.7)),
-    panel.background = element_blank(),
-    plot.background = element_blank(),
-    panel.grid.major.y = element_line(color = "gray75", linetype = "dotted"),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(size = rel(1.1)),
-    text = element_text(color = "gray20", size = 10),
-    axis.text = element_text(size = rel(1.0)),
-    axis.text.x = element_text(color = "gray20", size = rel(1.0)),
-    axis.text.y = element_text(color = "gray20", size = rel(1.0)),
-    axis.title.x = element_text(size = rel(1.0), vjust = 0),
-    axis.title.y = element_text(size = rel(1.0), vjust = 1),
-    axis.ticks.y = element_blank(),
-    axis.ticks.x = element_blank(),
-    legend.position = "none"
-  )
-
-
-player_cohort_gm <- "alireza2003"
-
-## load in the GM data for this
-path_id <- 4  ## for GM 
-data_path <- all_data_path[path_id]
-files <- list.files(data_path)
-lichess_data <- files |> 
-  map_dfr(~read_player(data_path, .x))
-
-bullet_data_fig_1_gm <- lichess_data |> 
-  mutate(Event = tolower(Event)) |>
-  filter(Variant == "Standard") |>
-  filter(grepl("rated bullet game", Event))
-rm(lichess_data)
-
-p2 <- bullet_data_fig_1_gm |> 
-  filter(Username == player_cohort_gm)
-
-p2$newELO <- ifelse(p2$White == paste0(player_cohort_gm),
-                    p2$WhiteElo, p2$BlackElo)
-thetitle <- paste0("Player From GM Cohort")
-p2_sorted <- p2 |> arrange(UTCDate, UTCTime)
-p2_sorted$event <- 1:nrow(p2_sorted)
-
-tidy_plot2 <- ggplot(p2_sorted, aes(x = event, y = newELO)) +
-  # scale_colour_manual(values = getPalette(colourCount)) +
-  scale_linetype_manual(values = ltypes) +
-  xlab("Games Played") +
-  ylab("Lichess Rating") +
-  ggtitle(thetitle) +
-  ylim(ylim1, ylim2) +
-  geom_line(lwd = linewd) +
-  theme(
-    plot.title = element_text(hjust = 0, vjust = 1, size = rel(1.7)),
-    panel.background = element_blank(),
-    plot.background = element_blank(),
-    panel.grid.major.y = element_line(color = "gray75", linetype = "dotted"),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(size = rel(1.1)),
-    text = element_text(color = "gray20", size = 10),
-    axis.text = element_text(size = rel(1.0)),
-    axis.text.x = element_text(color = "gray20", size = rel(1.0)),
-    axis.text.y = element_text(color = "gray20", size = rel(1.0)),
-    axis.title.x = element_text(size = rel(1.0), vjust = 0),
-    axis.title.y = element_text(size = rel(1.0), vjust = 1),
-    # axis.ticks.y = element_blank(),
-    axis.ticks.x = element_blank(),
-    legend.position = "none"
-  )
-
-tdy1 <- tidy_plot1 + theme_single_y()
-tdy2 <- tidy_plot2 + theme_single_y()
-
-tidy_plot <- ggarrange(tdy1, tdy2)
-
-ggsave(paste0(newfilename, ".png"), tidy_plot,
-  dpi = 600, height = 5, width = 12
-)
-ggsave(plot = tidy_plot, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "elo_plot_2_players.png")), dpi = 600,
-       height = 5, width = 12)
+#save
+ggsave(plot = rating_plot, 
+       filename = here("Paper_WriteUp", "paper_figures", "fig1.png"), dpi = 1000,
+       height = 4.5, width = 10)
 ```
 
 
