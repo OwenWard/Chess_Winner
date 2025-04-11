@@ -658,6 +658,7 @@ winner_plot_17_19 <- player_pars |>
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  xlim(c(-0.1, 0.1)) +
   theme_single_y()
 
 ggsave(plot = winner_plot_17_19, 
@@ -675,6 +676,7 @@ indiv_plot_17_19 <- player_pars |>
   labs(x = "Estimated Player Effect", y = element_blank(),
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  xlim(c(-0.1, 0.1)) +
   theme_single_y()
 
 ggsave(plot = indiv_plot_17_19, 
