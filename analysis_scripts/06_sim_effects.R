@@ -18,9 +18,8 @@ save_path = "/home/adamgee/scratch/results/sim_data/"
 #' each player should have their own job id
 jobid = Sys.getenv("SLURM_ARRAY_TASK_ID") %>% as.numeric()
 
-
 num_players = 10 #number of players in each dataset
-player_id = jobid %% num_players #id of player in this job
+player_id = (jobid %% num_players) + 1 #id of player in this job
 num_games = 20000 #this is roughly the same as the number of games per player in 1700-1900 cohort
 
 #' assume that the probability player j wins game i is p_ij = inv_logit(alpha_j + beta_j*x_ij + gamma_1*colour + gamma_2*rating_diff) 
@@ -32,9 +31,8 @@ num_games = 20000 #this is roughly the same as the number of games per player in
 #' experiential effects size of logit(0.51) represents 1% increase win percentage when coming from a win... logit(0.53) represents 3% increase...
 mu_beta_sizes = c(logit(0.51), logit(0.53), logit(0.6)) #these are the mu_betas
 
-#if we want to fit our model using smaller number of games, just take a subset of these 20,000 games
-
-
+#' if we want to fit our model using smaller number of games, just take a subset of these 20,000 games
+#' 
 #' we can parallelize the mu_betas and the players
 #' so each player will loop over 1 -> num_games for 3 different values of mu_beta
 #' 
@@ -59,7 +57,7 @@ betas = mu_beta_sizes[ceiling(jobid/num_players)] + rnorm(n = num_players, mean 
 #' now simulate the games for this player 
 #' 
 #' 
-#' RIGHT NOW THIS IS USING NO STANDARISATION!!! JUST 0, 0.5, 1 AS HISTORY FOR BETA
+#' RIGHT NOW THIS IS USING NO STANDARISATION!!! JUST USES 0, 0.5, 1 AS HISTORY FOR BETA
 
 #for storage
 sim_games = data.frame("player_id" = as.numeric(), "result" = as.numeric(), "colour" = as.numeric(), 
