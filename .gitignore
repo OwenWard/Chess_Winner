@@ -12,4 +12,5 @@ owen/Write Ups/02_more_eda_*
 *.tex
 *.out
 *.Rproj
+*.exe
 box_data/
