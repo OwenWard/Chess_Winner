@@ -7,6 +7,14 @@
 ##
 
 
+
+##### April 15, 2025 ######
+#' Adam revision 
+#' removing the standardization of x_ij term
+#' also assuming games played in different sessions have no relation, so make their history NULL (ie same as draw)
+
+
+
 library(tidyverse)
 library(RcppRoll)
 library(cmdstanr)
@@ -91,15 +99,20 @@ tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |>
 
 init_data <- tidy_games |>
   mutate(WhiteElo = as.numeric(WhiteElo),
-         BlackElo = as.numeric(BlackElo)) |>
-  mutate(focal_user = ifelse(focal_white == 1, White, Black)) |>
-  mutate(elo_diff = ifelse(focal_white == 1,
-                           WhiteElo - BlackElo, BlackElo - WhiteElo)) |>
-  mutate(focal_id = match(focal_user, users)) |>
-  select(focal_user, focal_id, focal_white,
-         focal_win_prop, elo_diff, focal_result) |>
+         BlackElo = as.numeric(BlackElo),
+         focal_user = ifelse(focal_white == 1, White, Black),
+         elo_diff = ifelse(focal_white == 1,
+                           WhiteElo - BlackElo, BlackElo - WhiteElo),
+         focal_id = match(focal_user, users),
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
+  dplyr::select(focal_user, focal_id, focal_white, 
+                focal_win_prop, elo_diff, focal_result,
+                UTCDateTime) |>
   group_by(focal_id) |>
-  mutate(ave_prop = lag(focal_win_prop, default = 0) - mean(focal_result)) |>
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #make sure the NAs don't mess anything up
+         ave_prop = ifelse(time_diff <= 300,  #if games played in diff sessions, make history same as draw (ie NULL)
+                           lag(focal_win_prop, default = 0.5), #removing standardization
+                           0.5)) |>
   filter(focal_result != 0.5)
 
 cat("----------\n")
