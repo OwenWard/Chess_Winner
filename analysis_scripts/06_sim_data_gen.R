@@ -83,6 +83,6 @@ for(i in 1:num_games) {
 }
 
 #save dataset
-write.csv(sim_games, file = paste0(save_path, "sim_dataset_", jobid, ".csv"))
+write.csv(sim_games, file = paste0(save_path, "sim_dataset_", jobid, ".csv"), row.names = FALSE)
 
 
