@@ -52,7 +52,8 @@ gamma2 = 0.0038 #rating effect
 #varying player effect values
 set.seed(2025)
 alphas = rnorm(n = num_players, mean = -0.075, sd = 0.05) #roughly the dist of the alphas from 1700-1900 fit in paper - should be close enough
-betas = mu_beta_sizes[ceiling(jobid/num_players)] + rnorm(n = num_players, mean = 0, sd = 0.1) #mu_beta plus some noise to vary the betas, roughly the same as tau_2 in paper
+mu_beta = mu_beta_sizes[ceiling(jobid/num_players)] #mu_beta of current job
+betas = mu_beta + rnorm(n = num_players, mean = 0, sd = 0.1) #mu_beta plus some noise to vary the betas, roughly the same as tau_2 in paper
 
 
 #' now simulate the games for this player 
@@ -63,7 +64,7 @@ betas = mu_beta_sizes[ceiling(jobid/num_players)] + rnorm(n = num_players, mean 
 #for storage
 sim_games = data.frame("player_id" = as.numeric(), "result" = as.numeric(), "colour" = as.numeric(), 
                        "rating_diff" = as.numeric(), "last_result" = as.numeric(), "beta" = as.numeric(), 
-                       "alpha" = as.numeric(), "gamma1" = as.numeric(), "gamma2" = as.numeric())
+                       "mu_beta" = as.numeric(), "alpha" = as.numeric(), "gamma1" = as.numeric(), "gamma2" = as.numeric())
 for(i in 1:num_games) {
   #current covariate (game) info
   
@@ -79,7 +80,7 @@ for(i in 1:num_games) {
   
   #store everything - player number, result, colour, rating diff, last result, parameter values
   sim_games[i,] = c(player_id, curr_result, curr_colour, curr_rating_diff, last_result, 
-                    betas[player_id], alphas[player_id], gamma1, gamma2) #the row for this data set
+                    betas[player_id], mu_beta, alphas[player_id], gamma1, gamma2) #the row for this data set
 }
 
 #save dataset
