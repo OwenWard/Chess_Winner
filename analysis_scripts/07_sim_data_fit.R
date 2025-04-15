@@ -20,6 +20,7 @@ source(here("utils/helper.R"))
 
 data_path = "/home/adamgee/scratch/data/sim_data/"
 save_path = "/home/adamgee/scratch/results/sim_data_fits/"
+dir.create(save_path, showWarnings = FALSE) #create save path just in case its not there
 
 #data_path = "C:/Users/adamg/Desktop/Chess_Winner/box_data/sim_data/"
 files = list.files(data_path)
