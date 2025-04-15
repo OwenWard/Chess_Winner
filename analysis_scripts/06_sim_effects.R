@@ -7,6 +7,7 @@
 library(tidyverse)
 library(here)
 library(rstanarm)
+library(VGAM)
 
 source(here("utils/helper.R"))
 
@@ -65,7 +66,9 @@ sim_games = data.frame("player_id" = as.numeric(), "result" = as.numeric(), "col
                        "alpha" = as.numeric(), "gamma1" = as.numeric(), "gamma2" = as.numeric())
 for(i in 1:num_games) {
   #current covariate (game) info
-  curr_rating_diff = rnorm(n = 1, mean = 0, sd = 60) #sd found from the sd of the original 1700-1900 rating diffs
+  
+  #laplace dist matches the rating diffs distribution in the original data set much better than normal 
+  curr_rating_diff = rlaplace(n = 1, location = 0, scale = 30) #want sd ~ 60 (found from the sd of the original 1700-1900 rating diffs) - this means scale 30
   curr_colour = sample(c(0, 1), prob = c(0.5, 0.5), size = 1) #1 is white, 0 is black
   last_result = ifelse(i == 1, 0.5, sim_games$result[i - 1]) #assume first game history is same as draw
   
