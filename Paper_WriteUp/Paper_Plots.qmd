@@ -34,6 +34,7 @@ library(viridis)
 library(PlayerRatings)
 library(ggrepel)
 library(ggpubr)
+library(rstanarm)
 options(mc.cores = parallel::detectCores())
 theme_set(theme_bw())
 
@@ -422,7 +423,7 @@ plot_data = lichess_data %>%
 #plotting
 rating_plot = ggplot(data = plot_data, mapping = aes(x = game, y = focal_rating, colour = Username)) +
   geom_line() +
-  labs(x = "Games Played", y = "Rating") + 
+  labs(x = "Games Played", y = "Rating", colour = "") + 
   theme_single_y_legend()
 rating_plot
 
@@ -1270,6 +1271,13 @@ We currently have two initial model checking
 procedures.
 
 
+## Posterior Predictive Plots
+
+```{r figure 7 - PPDs for Magnus & Nihal}
+
+```
+
+
 ### Permuting for 1700-1900
 
 ```{r perm for 17-19}
@@ -1516,13 +1524,222 @@ ggsave(plot = perm_gm_player,
 ```
 
 
-<!-- TO DO - Tidy up below here -->
 
-## Posterior Predictive Plots
+## Simulation Results
 
 ```{r}
+#the fits and sim datasets are stored here
+sim_path = here("results_revision", "sim_data_fits")
+sim_dataset_names = list.files(sim_path, pattern = "*.csv")
+sim_fit_names = list.files(sim_path, pattern = "*.RDS")
 
+#list of all the sim datasets and corresponding fits 
+sim_datasets_list = paste0(sim_path, "/", sim_dataset_names) %>% lapply(read.csv)
+names(sim_datasets_list) = tools::file_path_sans_ext(basename(sim_dataset_names))
+
+sim_fit_list = paste0(sim_path, "/", sim_fit_names) %>% lapply(readRDS)
+names(sim_fit_list) = tools::file_path_sans_ext(basename(sim_fit_names))
+
+
+# Winner effects on single dataset
+
+# #the simulated dataset and corresponding fit to plot
+# sim_dataset_num = 3
+# 
+# #global effects
+# facet_labels = as_labeller(c(
+#   mu_beta = "mu[beta]",
+#   gamma1 = "gamma[1]",
+#   gamma2 = "gamma[2]",
+#   sigma_1 = "sigma[1]",
+#   `tau[1]` = "tau[1]",
+#   `tau[2]` = "tau[2]",
+#   sigma_g1 = "sigma[g[1]]",
+#   sigma_g2 = "sigma[g[2]]"
+# ), label_parsed)
+# 
+# global_plot = sim_fit_list[[sim_dataset_num]]$draws(c("mu_beta", "gamma1", "gamma2", "sigma_1", "tau[1]", "tau[2]", "sigma_g1", "sigma_g2")) |> 
+#   as_draws_df() |> 
+#   pivot_longer(cols = "mu_beta":"sigma_g2") |> 
+#   ggplot(aes(value)) +
+#   geom_histogram() +
+#    facet_wrap(~name, ncol = 4, scales = "free",
+#              labeller = labeller(name = facet_labels)) +
+#   labs(x = element_blank(), y = element_blank()) +
+#   theme_4col() +
+#   scale_x_continuous(breaks = breaks_pretty(n = 2)) 
+# global_plot
+# 
+# 
+# #experiential effects
+# mod_pars = sim_fit_list[[sim_dataset_num]]$draws() |>
+#     as_draws_df() |>
+#     select(-any_of(c("lp__", ".chain", ".iteration", ".draw"))) |>
+#     pivot_longer(cols = everything()) |>
+#     filter(startsWith(name, "beta[2")) |>
+#     mutate(id = stringr::str_extract(name, pattern = "\\d+]"),
+#            id = stringr::str_replace(id, "\\]", ""), 
+#            id = as.numeric(id))
+# 
+# #order of min to max estiamted betas - makes plot look nicer
+# beta_order = mod_pars %>% group_by(id) %>% summarise(mean = mean(value)) %>% arrange(mean) %>% pull(id)
+# 
+# #true experiential effects
+# true_betas = sim_datasets_list[[sim_dataset_num]] %>% 
+#   group_by(player_id) %>% 
+#   summarise(true_beta = unique(beta)) %>%
+#   rename(id = player_id)
+# 
+# #reordering
+# true_betas = true_betas[match(beta_order, true_betas$id),] %>% 
+#   mutate(ymin = as.numeric(factor(row_number())) - 0.2,
+#          ymax = as.numeric(factor(row_number())) + 0.2)
+# 
+# #plot
+# winner_plot = mod_pars |> 
+#   ggplot(aes(y = reorder(id, value, FUN = median), x = value)) +
+#   stat_histinterval() +
+#   geom_segment(data = true_betas,
+#                aes(x = true_beta, xend = true_beta, y = ymin, yend = ymax),
+#                color = "orange", linetype = "dashed", linewidth = 2) +
+#   labs(x = "Estimated Experiential Effect", y = "Simulated Player ID") +
+#   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+#   theme_single_y()
+# winner_plot
+
+
+#### winner plots with same mu_beta size and varying num games per player
+
+draws_list = lapply(sim_fit_list, function(x) {
+  x$draws() |>
+    as_draws_df() |>
+    select(-any_of(c("lp__", ".chain", ".iteration", ".draw"))) |>
+    pivot_longer(cols = everything()) |>
+    filter(startsWith(name, "beta[2")) |>
+    mutate(id = stringr::str_extract(name, pattern = "\\d+]"),
+           id = stringr::str_replace(id, "\\]", ""), 
+           id = as.numeric(id))
+})
+
+#combing fit results by mu_beta size
+small_effect_draws = draws_list[1:3] %>% bind_rows(.id = "column_label") %>% 
+  mutate(num_games = case_when(endsWith(column_label, "1") ~ 1000,
+                               endsWith(column_label, "2") ~ 5000,
+                               endsWith(column_label, "3") ~ 20000),
+         num_games = factor(num_games, levels = c("1000", "5000", "20000"))) #make sure the levels are messing up here
+  
+med_effect_draws = draws_list[4:6] %>% bind_rows(.id = "column_label") %>% 
+  mutate(num_games = case_when(endsWith(column_label, "4") ~ 1000,
+                               endsWith(column_label, "5") ~ 5000,
+                               endsWith(column_label, "6") ~ 20000),
+         num_games = factor(num_games, levels = c("1000", "5000", "20000"))) #make sure the levels are messing up here
+
+big_effect_draws = draws_list[7:9] %>% bind_rows(.id = "column_label") %>% 
+  mutate(num_games = case_when(endsWith(column_label, "7") ~ 1000,
+                               endsWith(column_label, "8") ~ 5000,
+                               endsWith(column_label, "9") ~ 20000),
+         num_games = factor(num_games, levels = c("1000", "5000", "20000"))) #make sure the levels are messing up here
+
+
+## small mu_beta plot ##
+
+#true experiential effects
+true_betas = sim_datasets_list[[1]] %>% 
+  group_by(player_id) %>% 
+  summarise(true_beta = unique(beta)) %>%
+  rename(id = player_id)
+
+#reordering
+true_betas = true_betas[match(beta_order, true_betas$id),] %>% 
+  mutate(ymin = as.numeric(factor(row_number())) - 0.3,
+         ymax = as.numeric(factor(row_number())) + 0.3)
+
+#plot
+small_effect_plot = small_effect_draws  |>
+  ggplot(aes(y = reorder(id, value, FUN = median), x = value, colour = num_games)) +
+  #stat_histinterval(aes(fill = num_games), position = "dodgejust") +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  #stat_dots(aes(colour = num_games), position = "dodgejust") +
+  geom_segment(data = true_betas,
+               aes(x = true_beta, xend = true_beta, y = ymin, yend = ymax),
+               color = "red", linewidth = 1.5) +
+  labs(x = "Estimated Experiential Effect", y = "Simulated Player ID", colour = "Number of Games\nPlayed per Player") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y_legend() +
+  scale_color_viridis_d(option = "D")
+
+#save
+ggsave(plot = small_effect_plot, 
+       filename = here("Paper_WriteUp", "paper_figures", "fig_sim_1.png"), dpi = 1000,
+       height = 6, width = 7)
+
+
+## med mu_beta plot ##
+
+#true experiential effects
+true_betas = sim_datasets_list[[4]] %>% 
+  group_by(player_id) %>% 
+  summarise(true_beta = unique(beta)) %>%
+  rename(id = player_id)
+
+#reordering
+true_betas = true_betas[match(beta_order, true_betas$id),] %>% 
+  mutate(ymin = as.numeric(factor(row_number())) - 0.3,
+         ymax = as.numeric(factor(row_number())) + 0.3)
+
+#plot
+med_effect_plot = med_effect_draws  |>
+  ggplot(aes(y = reorder(id, value, FUN = median), x = value, colour = num_games)) +
+  #stat_histinterval(aes(fill = num_games), position = "dodgejust") +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  #stat_dots(aes(colour = num_games), position = "dodgejust") +
+  geom_segment(data = true_betas,
+               aes(x = true_beta, xend = true_beta, y = ymin, yend = ymax),
+               color = "red", linewidth = 1.5) +
+  labs(x = "Estimated Experiential Effect", y = "Simulated Player ID", colour = "Number of Games\nPlayed per Player") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y_legend() +
+  scale_color_viridis_d(option = "D")
+
+#save
+ggsave(plot = med_effect_plot, 
+       filename = here("Paper_WriteUp", "paper_figures", "fig_sim_2.png"), dpi = 1000,
+       height = 6, width = 7)
+
+
+## big mu_beta plot ##
+
+#true experiential effects
+true_betas = sim_datasets_list[[7]] %>% 
+  group_by(player_id) %>% 
+  summarise(true_beta = unique(beta)) %>%
+  rename(id = player_id)
+
+#reordering
+true_betas = true_betas[match(beta_order, true_betas$id),] %>% 
+  mutate(ymin = as.numeric(factor(row_number())) - 0.3,
+         ymax = as.numeric(factor(row_number())) + 0.3)
+
+#plot
+big_effect_plot = big_effect_draws  |>
+  ggplot(aes(y = reorder(id, value, FUN = median), x = value, colour = num_games)) +
+  #stat_histinterval(aes(fill = num_games), position = "dodgejust") +
+  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
+  #stat_dots(aes(colour = num_games), position = "dodgejust") +
+  geom_segment(data = true_betas,
+               aes(x = true_beta, xend = true_beta, y = ymin, yend = ymax),
+               color = "red", linewidth = 1.5) +
+  labs(x = "Estimated Experiential Effect", y = "Simulated Player ID", colour = "Number of Games\nPlayed per Player") +
+  geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  theme_single_y_legend() +
+  scale_color_viridis_d(option = "D")
+
+#save
+ggsave(plot = big_effect_plot, 
+       filename = here("Paper_WriteUp", "paper_figures", "fig_sim_3.png"), dpi = 1000,
+       height = 6, width = 7)
 ```
+
 
 
 
