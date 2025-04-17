@@ -543,6 +543,71 @@ ggsave(plot = fig2b,
 
 ### Global Parameters
 
+
+```{r figure 3 - Updated}
+### Adam
+#' April 17, 2025
+#' adding code to updated fig3
+#' only comparing gamma1, gamma2, & mu_beta across all 4 cohorts
+
+#read in models
+model_17_19 = readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_prev_n1.RDS"))
+model_20_22 = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_prev_n1.RDS"))
+model_23_25 = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_prev_n1.RDS"))
+model_gm = readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_prev_n1.RDS"))
+
+
+#get global effects of each
+pars_17_19 <- model_17_19$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "1700-1900")
+
+pars_20_22 = model_20_22$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "2000-2200")
+
+pars_23_25 = model_23_25$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "2300-2500")
+
+pars_gm <- model_gm$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+  as_draws_df() |> 
+  pivot_longer(cols = "mu_beta":"gamma2") |> 
+  mutate(model = "GM")
+
+#for plotting
+facet_labels <- as_labeller(c(
+  mu_beta = "mu[beta]",
+  gamma1 = "gamma[1]",
+  gamma2 = "gamma[2]",
+  sigma_1 = "sigma[1]",
+  `tau[1]` = "tau[1]",
+  `tau[2]` = "tau[2]",
+  sigma_g1 = "sigma[g[1]]",
+  sigma_g2 = "sigma[g[2]]"
+), label_parsed)
+
+gm_amateur_comp_global <- bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
+  ggplot(aes(x = value, y = name, color = factor(model, levels = c("1700-1900", "2000-2200", "2300-2500", "GM")))) +
+  stat_pointinterval(position = position_dodge(width = 0.2)) +
+  facet_wrap(~name,
+             scales = "free",
+             labeller = labeller(name = facet_labels)) +
+  labs(x = element_blank(), y = element_blank(), color = element_blank()) +
+  theme_3col() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_color_viridis_d(option = "H")
+
+gm_amateur_comp_global
+
+```
+
+
+
 ```{r figure 3 left - plot global parameters for 17-19}
 data_path <- here("results/lichess1700-1900_2025")
 
@@ -720,7 +785,6 @@ ggsave(plot = global_gm_bullet_prev,
                               "gm_prev_global.png")), dpi = 600,
        height = 5, width = 7)
 ```
-
 
 
 ```{r interpret the estimated coefficients gm}
@@ -1428,7 +1492,7 @@ for (i in 1:num_games) {
                      Player2 = opp,
                      Score = sim_result)
   initstate = tibble(Player = c(users[focal_player_used], opp),
-                     Rating = c(curr_rating, opp_elo),
+                     Rating = c(curr_rating, opp_rating),
                      Deviation = 50,
                      Volatility = 0.04)
     
