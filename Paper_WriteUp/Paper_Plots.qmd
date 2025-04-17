@@ -1274,7 +1274,218 @@ procedures.
 ## Posterior Predictive Plots
 
 ```{r figure 7 - PPDs for Magnus & Nihal}
+#where models are stored
+model_path = here("results_revision", "lichessGrandmasters")
 
+#read in the model and users
+model = readRDS(file = here(model_path, "all_rated_bullet_model_prev_n1.RDS"))
+users = readRDS(file = here(model_path, "users_bullet.RDS"))
+
+#grandmaster data
+data_path = paste0(all_data_path[4], "/")
+files = list.files(data_path)
+lichess_data = files %>%
+  map_dfr(~read_player(data_path, .x))
+
+
+#Tidy data
+
+#selecting bullet 60+0 only
+bullet_60 = lichess_data  %>%
+  mutate(Event = tolower(Event)) %>%
+  filter(Event == "rated bullet game", Variant == "Standard", TimeControl == "60+0") %>%
+  dplyr::select(c("White", "Black", "Result", "UTCDate", "UTCTime", "Username", "WhiteElo", "BlackElo"))
+
+#remove the duplicate rows
+bullet_60_no_dup = bullet_60[!duplicated(bullet_60),]
+
+#final 1000 games each user plays
+last_games = bullet_60_no_dup %>%
+  filter(Username %in% users) %>%  
+  group_by(Username) %>%
+  arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
+  slice_tail(n = 1000) %>%
+  ungroup()
+
+#only consider previous game for history
+tidy_games = map_dfr(users, get_hist, last_games, prev_n = 1) |> 
+  as_tibble()
+
+#adding performance history
+init_data = tidy_games |>
+  mutate(WhiteElo = as.numeric(WhiteElo),
+         BlackElo = as.numeric(BlackElo),
+         focal_user = ifelse(focal_white == 1, White, Black),
+         elo_diff = ifelse(focal_white == 1,
+                           WhiteElo - BlackElo, BlackElo - WhiteElo),
+         focal_id = match(focal_user, users),
+         focal_rating = ifelse(focal_white == 1, WhiteElo, BlackElo),
+         opp = ifelse(focal_white == 1, Black, White),
+         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo),
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
+  dplyr::select(focal_user, focal_id, focal_white, WhiteElo, BlackElo,
+                focal_win_prop, elo_diff, focal_result, opp, opp_rating,
+                focal_rating, UTCDateTime) |>
+  group_by(focal_id) |>
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), 
+         ave_prop = ifelse(time_diff <= 300,  #if games played in diff sessions, make history same as draw (ie NULL)
+                           lag(focal_win_prop, default = 0.5), #removing standardization
+                           0.5)) |>
+  ungroup() |>
+  filter(focal_result != 0.5)
+
+#ids of players to plot
+magnus_id = which(users == "DrNykterstein") #magnus
+nihal_id = which(users == "nihalsarin2004") #nihal
+
+#choose who to plot
+focal_player_used = magnus_id
+
+#slightly less than 1000 games since filtered out draws
+focal_init_data = init_data |>
+  filter(focal_user == users[focal_player_used])
+
+focal_init = data.frame("Player" = users[focal_player_used],
+                        "Rating" = ifelse(focal_init_data$focal_white == 1, 
+                                          focal_init_data$WhiteElo, focal_init_data$BlackElo))
+
+num_sims = 100 #number of rating curve simulations over final games
+num_games = nrow(focal_init_data) #number of games to predict over
+
+#parameter draws for focal player
+focal_draws = model$draws() |> as_draws_df() |>
+  dplyr::select(starts_with(c("beta[", "gamma"))) |>
+  mutate(draw = row_number()) |> 
+  pivot_longer(cols = "beta[1,1]":paste0("beta[2,", as.character(length(users)), "]")) |> 
+  mutate(param = stringr::str_extract(name, pattern = "\\d"),
+         id = stringr::str_extract(name, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  dplyr::select(-name) |> 
+  pivot_wider(names_from = param, values_from = value) |> 
+  rename(beta1 = `1`, beta2 = `2`) %>%
+  filter(id == focal_player_used) %>%
+  filter(draw %in% 1:num_sims)
+  
+  
+
+## the covariates for the future games
+future_games_cov = tibble(focal = as.character(focal_init_data$focal_id),  
+                          color = focal_init_data$focal_white,
+                          elo_diff = focal_init_data$elo_diff,
+                          hist = focal_init_data$ave_prop,
+                          focal_rating = focal_init_data$focal_rating,
+                          opponent = focal_init_data$opp,
+                          opponent_rating = focal_init_data$opp_rating) 
+
+#storage
+glicko_sim = matrix(NA, nrow = num_games, ncol = num_sims)
+game_sim = matrix(NA, nrow = num_games, ncol = num_sims)
+#probs = matrix(NA, nrow = num_games, ncol = num_sims) #for debugging
+
+#sim
+set.seed(2025)
+for (i in 1:num_games) {
+  #current game info
+  curr_game_info = future_games_cov[i,]
+
+  #indicator for colour effect, 1 is white, 0 is black
+  colour_ind = curr_game_info$color
+
+  #elo diff for rating effect
+  rating_diff = curr_game_info$elo_diff
+  
+  #opponent name and rating
+  opp = curr_game_info$opponent
+  opp_rating = curr_game_info$opponent_rating
+  
+
+  #simulate wins/loss on current game
+  for (j in 1:num_sims) {
+    curr_draw = focal_draws %>% filter(draw == j)
+
+  ## if first game use default history (0), otherwise use the previous
+  if (i == 1) {
+    curr_rating = curr_game_info$focal_rating
+    curr_hist = 0.5 #assume they're current past performance is at their usual level
+  } else {
+    curr_hist = curr_game_info$hist
+    curr_rating = glicko_sim[i - 1, j]
+  }
+
+  #find probability
+  lin_comb = curr_draw$beta1 + (curr_draw$beta2 * curr_hist) +
+             (curr_draw$gamma1 * colour_ind) +
+             (curr_draw$gamma2 * rating_diff)
+  prob = invlogit(lin_comb)
+
+  #simulate result
+  sim_result = sample(c(1, 0), size = 1, prob = c(prob, 1 - prob))
+  
+  #find rating
+  games = data.frame(Week = i,
+                     Player1 = users[focal_player_used],
+                     Player2 = opp,
+                     Score = sim_result)
+  initstate = tibble(Player = c(users[focal_player_used], opp),
+                     Rating = c(curr_rating, opp_elo),
+                     Deviation = 50,
+                     Volatility = 0.04)
+    
+  sim_glick = glicko2(games, status = initstate, history = TRUE, gamma = colour_ind)
+  ## extract the rating of focal player and store it
+  focal_glick = sim_glick$history[users[focal_player_used], ,]
+    
+  #store current result and rating
+  glicko_sim[i, j] = as.numeric(focal_glick)[1]
+  game_sim[i, j] = sim_result
+  }
+  if(i %% 10 == 0) {print(i)} #progress of number of games simulated
+}
+
+#true glicko rating of all games before last 1000
+true_glicko_first = bullet_60_no_dup |> 
+  filter(Username == users[focal_player_used]) |> 
+  arrange(UTCDate, UTCTime) |> 
+  slice(1:(n() - 1000)) |> 
+  mutate(game = row_number(), glicko = ifelse(Username == White, WhiteElo, BlackElo)) %>%
+  dplyr::select(game, glicko)
+num_prev = nrow(true_glicko_first) #number of games before final simulated games
+
+#true glicko rating of final 1000 games
+true_glicko_final = focal_init_data %>%
+  mutate(game = row_number() + num_prev, glicko = ifelse(focal_white == 1, WhiteElo, BlackElo)) %>%
+  dplyr::select(game, glicko)
+
+#glicko rating across all sims on final 100 games
+final_sims = data.frame(glicko_sim, check.names = FALSE) %>%
+  mutate(game = row_number() + num_prev) %>%
+  pivot_longer(cols = -game, names_to = "Sim", values_to = "glicko")
+
+#mean glicko rating for each game across all sims
+sim_mean_glicko = final_sims %>% group_by(game) %>% summarise(mean_glicko = mean(glicko))
+
+#plot
+ppd_rating_plot = ggplot(data = true_glicko_first, aes(x = game, y = glicko)) +
+  geom_line(linewidth = 0.5, col = "darkred") + 
+  geom_line(data = final_sims, mapping = aes(group = Sim), alpha = 0.05) +
+  geom_line(data = sim_mean_glicko, mapping = aes(x = game, y = mean_glicko), 
+            alpha = 0.7) +
+  geom_line(data = true_glicko_final, col = "red", linewidth = 0.5) +
+  ylim(c(min(glicko_sim) - 50, max(glicko_sim) + 50)) +
+  xlim(c(num_prev - 1500, num_prev + num_games)) +
+  xlab("Games Played") + ylab("Glicko2 Rating") +
+  theme_single_y()
+ppd_rating_plot
+
+# #save magnus
+# ggsave(plot = ppd_rating_plot, 
+#        filename = here("Paper_WriteUp", "paper_figures", "fig7a.png"), dpi = 1000,
+#        height = 4.5, width = 10)
+# #save nihal
+# ggsave(plot = ppd_rating_plot, 
+#        filename = here("Paper_WriteUp", "paper_figures", "fig7b.png"), dpi = 1000,
+#        height = 4.5, width = 10)
 ```
 
 
