@@ -547,35 +547,41 @@ ggsave(plot = fig2b,
 #' only comparing gamma1, gamma2, & mu_beta across all 4 cohorts
 
 #read in models
-model_17_19 = readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_prev_n1.RDS"))
-model_20_22 = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_prev_n1.RDS"))
-model_23_25 = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_prev_n1.RDS"))
-model_gm = readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_prev_n1.RDS"))
+fit_17_19_bullet_prev  = readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_prev_n1.RDS"))
+fit_20_22_bullet_prev  = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_prev_n1.RDS"))
+fit_23_25_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_prev_n1.RDS"))
+fit_gm_bullet_prev  = readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_prev_n1.RDS"))
+
+#read in users
+bullet_17_19 = readRDS(here("results_revision", "lichess1700-1900", "users_bullet.RDS"))
+bullet_20_22 = readRDS(here("results_revision", "lichess2000-2200", "users_bullet.RDS"))
+bullet_23_25 = readRDS(here("results_revision", "lichess2300-2500", "users_bullet.RDS"))
+bullet_gm = readRDS(here("results_revision", "lichessGrandmasters", "users_bullet.RDS"))
 
 
 #get global effects of each
-pars_17_19 <- model_17_19$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+pars_17_19 = fit_17_19_bullet_prev $draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "1700-1900")
 
-pars_20_22 = model_20_22$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+pars_20_22 = fit_20_22_bullet_prev$draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "2000-2200")
 
-pars_23_25 = model_23_25$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+pars_23_25 = fit_23_25_bullet_prev$draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "2300-2500")
 
-pars_gm <- model_gm$draws(c("mu_beta", "gamma1", "gamma2")) |> 
+pars_gm = fit_gm_bullet_prev$draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "GM")
 
 #for plotting
-facet_labels <- as_labeller(c(
+facet_labels = as_labeller(c(
   mu_beta = "mu[beta]",
   gamma1 = "gamma[1]",
   gamma2 = "gamma[2]",
@@ -586,7 +592,7 @@ facet_labels <- as_labeller(c(
   sigma_g2 = "sigma[g[2]]"
 ), label_parsed)
 
-comp_global <- bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
+comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
   ggplot(aes(x = value, y = name, color = factor(model, levels = c("1700-1900", "2000-2200", "2300-2500", "GM")))) +
   stat_pointinterval(position = position_dodge(width = 0.2)) +
   facet_wrap(~name,
@@ -603,6 +609,7 @@ ggsave(plot = comp_global,
        height = 5, width = 7)
 ```
 
+
 ```{r interpret the estimated coefficients 17-19}
 #| eval: false
 gamma_ests <- model_17_19$summary(variables = 
@@ -616,6 +623,7 @@ gamma_ests <- model_17_19$summary(variables =
 1/(1 + exp(-1 * (0))) ## equally rated, playing as black
 1/(1 + exp(-1 * (100 * gamma_ests[2])))
 ```
+
 
 ```{r interpret the estimated coefficients gm}
 #| eval: false
@@ -635,7 +643,6 @@ gamma_ests_gm <- model_gm$summary(variables = c("gamma1",
 
 ```{r player level parameters for 17-19}
 #| eval: false
-
 player_id <- as_tibble(bullet_17_19) |> 
   mutate(id = row_number()) |> 
   rename(player_name = value)
@@ -679,6 +686,7 @@ player_pars |>
   filter(contain_zero == 0)
 ```
 
+
 ```{r figure 4 left}
 winner_plot_17_19 <- player_pars |> 
   filter(param == 2) |> 
@@ -697,6 +705,7 @@ ggsave(plot = winner_plot_17_19,
        height = 7, width = 7)
 ```
 
+
 ```{r figure s4 left - plot player effects}
 #| eval: false
 indiv_plot_17_19 <- player_pars |> 
@@ -706,7 +715,6 @@ indiv_plot_17_19 <- player_pars |>
   labs(x = "Estimated Player Effect", y = element_blank(),
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.1, 0.1)) +
   theme_single_y()
 
 ggsave(plot = indiv_plot_17_19, 
@@ -771,9 +779,9 @@ winner_plot_gm <- player_pars |>
   labs(x = "Estimated W/L-Effect", y = element_blank(), 
        title = "GM Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  xlim(c(-0.1, 0.1)) +
   theme_single_y()
 
-winner_plot_gm
 
 ggsave(plot = winner_plot_gm, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
@@ -958,7 +966,6 @@ ggsave(plot = hist_comp_player,
 
 
 
-
 ## Bullet vs Blitz for 17-19
 
 Compare the global parameters and the winner effects here, using the
@@ -1105,7 +1112,6 @@ ggsave(plot = comp_17_19_player,
 
 
 ## Bullet vs Blitz for GM
-
 
 ```{r figure 5 right - bullet v blitz gm}
 data_path <- here("results_2025/lichessGrandmasters")
@@ -1591,7 +1597,6 @@ ggsave(plot = perm_17_19_winner,
 
 ### Permuting for GM Data
 
-
 ```{r figure 8 right}
 perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
 
@@ -1718,6 +1723,8 @@ ggsave(plot = perm_gm_player,
 
 ## Simulation Results
 
+# Beta simulation comparison
+
 ```{r}
 #the fits and sim datasets are stored here
 sim_path = here("results_revision", "sim_data_fits")
@@ -1834,7 +1841,7 @@ big_effect_plot = beta_draws %>% filter(dataset_id %in% 7:9) %>%
 ```
 
 
-### mu_beta simulation comparison 
+# mu_beta simulation comparison 
 
 ```{r}
 ## same above plot but now mu_beta
