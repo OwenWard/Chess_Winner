@@ -538,13 +538,9 @@ ggsave(plot = fig2b,
 
 # Section 4: The Fitted Model
 
-
-## 1700-1900 Previous Game
-
 ### Global Parameters
 
-
-```{r figure 3 - Updated}
+```{r figure 3}
 ### Adam
 #' April 17, 2025
 #' adding code to updated fig3
@@ -590,7 +586,7 @@ facet_labels <- as_labeller(c(
   sigma_g2 = "sigma[g[2]]"
 ), label_parsed)
 
-gm_amateur_comp_global <- bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
+comp_global <- bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
   ggplot(aes(x = value, y = name, color = factor(model, levels = c("1700-1900", "2000-2200", "2300-2500", "GM")))) +
   stat_pointinterval(position = position_dodge(width = 0.2)) +
   facet_wrap(~name,
@@ -602,58 +598,14 @@ gm_amateur_comp_global <- bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm)
   scale_x_continuous(breaks = breaks_pretty(n = 2)) +
   scale_color_viridis_d(option = "H")
 
-gm_amateur_comp_global
-
-```
-
-
-
-```{r figure 3 left - plot global parameters for 17-19}
-data_path <- here("results/lichess1700-1900_2025")
-
-fit_17_19_bullet_prev <- readRDS(file = 
-                                   paste0(data_path,
-                                          "/all_rated_bullet_model_prev_n1.RDS"))
-
-
-bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-
-facet_labels <- as_labeller(c(
-  mu_beta = "mu[beta]",
-  gamma1 = "gamma[1]",
-  gamma2 = "gamma[2]",
-  sigma_1 = "sigma[1]",
-  `tau[1]` = "tau[1]",
-  `tau[2]` = "tau[2]",
-  sigma_g1 = "sigma[g[1]]",
-  sigma_g2 = "sigma[g[2]]"
-), label_parsed)
-
-global_17_19_bullet_prev <- fit_17_19_bullet_prev$draws(c("mu_beta",
-                                                          "gamma1", "gamma2",
-                           "sigma_1", "tau[1]", "tau[2]",
-                           "sigma_g1", "sigma_g2")) |> 
-  as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_wrap(~name, ncol = 4, scales = "free",
-             labeller = labeller(name = facet_labels)) +
-  labs(x = element_blank(), y = element_blank()) +
-  theme_4col() +
-  scale_x_continuous(breaks = breaks_pretty(n = 3))
-
-global_17_19_bullet_prev
-ggsave(plot = global_17_19_bullet_prev, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "17_19_prev_global.png")), dpi = 600,
+ggsave(plot = comp_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
        height = 5, width = 7)
 ```
 
-
 ```{r interpret the estimated coefficients 17-19}
 #| eval: false
-gamma_ests <- fit_17_19_bullet_prev$summary(variables = 
+gamma_ests <- model_17_19$summary(variables = 
                                               c("gamma1",
                                                 "gamma2")) |> 
   pull(mean)
@@ -665,6 +617,18 @@ gamma_ests <- fit_17_19_bullet_prev$summary(variables =
 1/(1 + exp(-1 * (100 * gamma_ests[2])))
 ```
 
+```{r interpret the estimated coefficients gm}
+#| eval: false
+gamma_ests_gm <- model_gm$summary(variables = c("gamma1",
+                                                          "gamma2")) |> 
+  pull(mean)
+## compute change in win probability for gamma1
+1/(1 + exp(-1 * (0)))
+1/(1 + exp(-1 * (gamma_ests_gm[1])))
+## change in win probability for elo difference
+1/(1 + exp(-1 * (0))) ## equally rated, playing as black
+1/(1 + exp(-1 * (100 * gamma_ests_gm[2])))
+```
 
 
 ### Winner and Player Effects
@@ -751,54 +715,6 @@ ggsave(plot = indiv_plot_17_19,
        height = 7, width = 7)
 ```
 
-
-
-## GM previous game
-
-### Global Parameters
-
-```{r figure 3 right - global parameters for gm data}
-data_path <- here("results_2025/lichessGrandmasters")
-
-fit_gm_bullet_prev <- 
-  readRDS(file = paste0(data_path,"/all_rated_bullet_model_prev_n1.RDS"))
-
-bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-
-global_gm_bullet_prev <- fit_gm_bullet_prev$draws(c("mu_beta",
-                                                          "gamma1", "gamma2",
-                           "sigma_1", "tau[1]", "tau[2]",
-                           "sigma_g1", "sigma_g2")) |> 
-  as_draws_df() |> 
-  pivot_longer(cols = "mu_beta":"sigma_g2") |> 
-  ggplot(aes(value)) +
-  geom_histogram() +
-   facet_wrap(~name, ncol = 4, scales = "free",
-             labeller = labeller(name = facet_labels)) +
-  labs(x = element_blank(), y = element_blank()) +
-  theme_4col() +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) 
-
-global_gm_bullet_prev
-ggsave(plot = global_gm_bullet_prev, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "gm_prev_global.png")), dpi = 600,
-       height = 5, width = 7)
-```
-
-
-```{r interpret the estimated coefficients gm}
-#| eval: false
-gamma_ests_gm <- fit_gm_bullet_prev$summary(variables = c("gamma1",
-                                                          "gamma2")) |> 
-  pull(mean)
-## compute change in win probability for gamma1
-1/(1 + exp(-1 * (0)))
-1/(1 + exp(-1 * (gamma_ests_gm[1])))
-## change in win probability for elo difference
-1/(1 + exp(-1 * (0))) ## equally rated, playing as black
-1/(1 + exp(-1 * (100 * gamma_ests_gm[2])))
-```
 
 ### Winner and Player Effects
 
