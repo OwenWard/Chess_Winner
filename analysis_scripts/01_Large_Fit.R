@@ -11,7 +11,7 @@
 ##### April 15, 2025 ######
 #' Adam revision 
 #' removing the standardization of x_ij term
-#' also assuming games played in different sessions have no relation, so make their history NULL (ie same as draw)
+#' also assuming games played in different sessions have no relation, so make their history NULL (ie same as their historical avg past performance)
 #' removing all the plots and stuff after we save the fit, we don't use that anymore
 
 
@@ -38,10 +38,10 @@ n <- 1 ## number of games to use for history
 
 all_data_path <- rep(NA, 4)
 all_save_path <- rep(NA, 4)
-all_data_path[1] <- here("box_data/lichess1700-1900/")
-all_data_path[2] <- here("box_data/lichess2000-2200/")
-all_data_path[3] <- here("box_data/lichess2300-2500/")
-all_data_path[4] <- here("box_data/lichessGrandmasters/")
+all_data_path[1] <- here("box_data", "lichess1700-1900", "/")
+all_data_path[2] <- here("box_data", "lichess2000-2200", "/")
+all_data_path[3] <- here("box_data", "lichess2300-2500", "/")
+all_data_path[4] <- here("box_data", "lichessGrandmasters", "/")
 all_save_path[1] <- here("results_revision/lichess1700-1900/")
 
 # all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
@@ -96,7 +96,8 @@ saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 # saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
-  as_tibble()
+  as_tibble() |>
+  distinct() #remove the duplicate rows if they exist
 
 init_data <- tidy_games |>
   mutate(WhiteElo = as.numeric(WhiteElo),
