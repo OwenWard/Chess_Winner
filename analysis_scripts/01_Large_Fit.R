@@ -70,7 +70,9 @@ small_data <- lichess_data |>
   # filter(Event == "Rated Bullet game") |>
   filter(TimeControl == "60+0") |>
   filter(Variant == "Standard") |>
-  filter(grepl("rated bullet game", Event))
+  filter(grepl("rated bullet game", Event)) |>
+  distinct() #remove the duplicate rows if they exist
+
 
 # ## what time length should be
 # small_data <- lichess_data |>
@@ -80,9 +82,6 @@ small_data <- lichess_data |>
 #   filter(grepl("rated blitz game", Event))
 
 users <- unique(small_data$Username)
-
-rm(lichess_data)
-
 
 ## when players play less than 10 games
 ## otherwise not needed
@@ -96,8 +95,7 @@ saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
 # saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
 
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
-  as_tibble() |>
-  distinct() #remove the duplicate rows if they exist
+  as_tibble() 
 
 init_data <- tidy_games |>
   mutate(WhiteElo = as.numeric(WhiteElo),
@@ -111,11 +109,13 @@ init_data <- tidy_games |>
                 focal_win_prop, elo_diff, focal_result,
                 UTCDateTime) |>
   group_by(focal_id) |>
-  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #make sure the NAs don't mess anything up
-         ave_prop = ifelse(time_diff <= 300,  #if games played in diff sessions, make history same as draw (ie NULL)
-                           lag(focal_win_prop, default = 0.5), #removing standardization
-                           0.5)) |>
-  filter(focal_result != 0.5)
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
+         cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
+         ave_prop = ifelse(time_diff >= 300 | is.na(time_diff),  
+                           cum_win_prob, #if games played in different session, history is their mean win prob up to the current game
+                           lag(focal_win_prop))) |> #if game played in same session, rolling mean over the past n games, removing standardization 
+  filter(focal_result != 0.5) %>%
+  ungroup()
 
 
 ### then fit the models
