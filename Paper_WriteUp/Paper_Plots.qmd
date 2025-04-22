@@ -547,10 +547,10 @@ ggsave(plot = fig2b,
 #' only comparing gamma1, gamma2, & mu_beta across all 4 cohorts
 
 #read in models
-fit_17_19_bullet_prev  = readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_prev_n1.RDS"))
-fit_20_22_bullet_prev  = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_prev_n1.RDS"))
-fit_23_25_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_prev_n1.RDS"))
-fit_gm_bullet_prev  = readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_prev_n1.RDS"))
+fit_17_19_bullet_prev  = readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_n1.RDS"))
+fit_20_22_bullet_prev  = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_n1.RDS"))
+fit_23_25_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
+fit_gm_bullet_prev  = readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_n1.RDS"))
 
 #read in users
 bullet_17_19 = readRDS(here("results_revision", "lichess1700-1900", "users_bullet.RDS"))
@@ -604,15 +604,15 @@ comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |>
   scale_x_continuous(breaks = breaks_pretty(n = 2)) +
   scale_color_viridis_d(option = "H")
 
-ggsave(plot = comp_global, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
-       height = 5, width = 7)
+# ggsave(plot = comp_global, 
+#        filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
+#        height = 5, width = 7)
 ```
 
 
 ```{r interpret the estimated coefficients 17-19}
 #| eval: false
-gamma_ests <- model_17_19$summary(variables = 
+gamma_ests <- fit_17_19_bullet_prev$summary(variables = 
                                               c("gamma1",
                                                 "gamma2")) |> 
   pull(mean)
@@ -627,7 +627,7 @@ gamma_ests <- model_17_19$summary(variables =
 
 ```{r interpret the estimated coefficients gm}
 #| eval: false
-gamma_ests_gm <- model_gm$summary(variables = c("gamma1",
+gamma_ests_gm <- fit_gm_bullet_prev$summary(variables = c("gamma1",
                                                           "gamma2")) |> 
   pull(mean)
 ## compute change in win probability for gamma1
@@ -692,16 +692,16 @@ winner_plot_17_19 <- player_pars |>
   filter(param == 2) |> 
   mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
   ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
-  stat_histinterval() +
+  stat_pointinterval() +
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.1, 0.1)) +
+  xlim(c(-0.125, 0.125)) +
   theme_single_y()
 
 ggsave(plot = winner_plot_17_19, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "17_19_prev_winner.png")), dpi = 600,
+                              "fig4_left.png")), dpi = 600,
        height = 7, width = 7)
 ```
 
@@ -711,7 +711,7 @@ ggsave(plot = winner_plot_17_19,
 indiv_plot_17_19 <- player_pars |> 
   filter(param == 1) |> 
   ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
-  stat_histinterval() +
+  stat_pointinterval() +
   labs(x = "Estimated Player Effect", y = element_blank(),
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
@@ -775,17 +775,17 @@ winner_plot_gm <- player_pars |>
   filter(param == 2) |> 
   mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |>
   ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
-  stat_histinterval() +
-  labs(x = "Estimated W/L-Effect", y = element_blank(), 
+  stat_pointinterval() +
+  labs(x = "Change in Win Probability", y = element_blank(), 
        title = "GM Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.1, 0.1)) +
+  xlim(c(-0.125, 0.125)) +
   theme_single_y()
 
 
 ggsave(plot = winner_plot_gm, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "gm_prev_winner.png")), dpi = 600,
+                              "fig4_right.png")), dpi = 600,
        height = 7, width = 7)
 ```
 
@@ -796,13 +796,11 @@ ggsave(plot = winner_plot_gm,
 indiv_plot_gm <- player_pars |> 
   filter(param == 1) |> 
   ggplot(aes(y = reorder(player_name, value, FUN = median), x = value)) +
-  stat_histinterval() +
+  stat_pointinterval() +
   labs(x = "Estimated Player Effect", y = element_blank(), 
        title = "GM Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
-
-indiv_plot_gm
 
 ggsave(plot = indiv_plot_gm, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
@@ -1598,23 +1596,26 @@ mu_beta_draws = mu_beta_draws_list %>% bind_rows(.id = "dataset_id") %>%
          num_games = case_when(dataset_id %in% c(1, 4, 7) ~ 1000,
                                dataset_id %in% c(2, 5, 8) ~ 5000,
                                dataset_id %in% c(3, 6, 9) ~ 20000),
-         true_mu_beta = factor(true_mu_beta, levels = c(as.character(true_mu_betas))),
+         true_mu_beta = factor(signif(true_mu_beta, 3), levels = c(as.character(signif(true_mu_betas, 3)))),
          num_games = factor(num_games, levels = c("1000", "5000", "20000")))
 
 #for the geom_segment below
 true_mu_betas_plotting = data.frame(true_val = true_mu_betas) %>%
-  mutate(ymin = as.numeric(factor(true_val)) - 0.25,
-         ymax = as.numeric(factor(true_val)) + 0.25)
+  mutate(ymin = as.numeric(as.factor(true_val)) - 0.3,
+         ymax = as.numeric(as.factor(true_val)) + 0.3)
 
 #plotting
 mu_beta_plot = mu_beta_draws %>% ggplot(aes(y = true_mu_beta, x = draw, colour = num_games)) +
   stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
   geom_segment(data = true_mu_betas_plotting,
                aes(x = true_val, xend = true_val, y = ymin, yend = ymax),
-               color = "red", linewidth = 1.5) +
+               color = "red", linewidth = 1.25) +
   labs(x = "Estimated Experiential Effect", y = "True mu_beta Value", colour = "Number of Games\nPlayed per Player") +
   theme_single_y_legend() +
+  scale_x_continuous(breaks = c(signif(true_mu_betas, 3)), 
+                     labels = c(as.character(signif(true_mu_betas, 3)))) +
   scale_color_viridis_d(option = "D")
+mu_beta_plot
 
 #save
 # ggsave(plot = mu_beta_plot,
