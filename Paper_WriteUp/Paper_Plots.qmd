@@ -602,7 +602,7 @@ comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |>
   labs(x = element_blank(), y = element_blank(), color = element_blank()) +
   theme_3col() +
   theme(legend.position = "bottom") +
-  facetted_pos_scales(x = list( #for customising scales on each facet
+  facetted_pos_scales(x = list( #for customizing scales on each facet
     name == "mu_beta" ~ scale_x_continuous(breaks = c(-0.15, 0, 0.15), limits = c(-0.17, 0.17)),
     name == "gamma1" ~ scale_x_continuous(breaks = breaks_pretty(n = 2)),
     name == "gamma2" ~ scale_x_continuous(breaks = breaks_pretty(n = 2))
@@ -1598,27 +1598,32 @@ mu_beta_draws = mu_beta_draws_list %>% bind_rows(.id = "dataset_id") %>%
          true_mu_beta = case_when(dataset_id %in% 1:3 ~ true_mu_betas[1],
                                   dataset_id %in% 4:6 ~ true_mu_betas[2],
                                   dataset_id %in% 7:9 ~ true_mu_betas[3]),
-         num_games = case_when(dataset_id %in% c(1, 4, 7) ~ 1000,
-                               dataset_id %in% c(2, 5, 8) ~ 5000,
-                               dataset_id %in% c(3, 6, 9) ~ 20000),
-         true_mu_beta = factor(signif(true_mu_beta, 3), levels = c(as.character(signif(true_mu_betas, 3)))),
+         num_games = case_when(dataset_id %in% c(1, 4, 7) ~ "1000",
+                               dataset_id %in% c(2, 5, 8) ~ "5000",
+                               dataset_id %in% c(3, 6, 9) ~ "20000"),
+         #true_mu_beta = factor(signif(true_mu_beta, 3), levels = c(as.character(signif(true_mu_betas, 3)))),
          num_games = factor(num_games, levels = c("1000", "5000", "20000")))
 
 #for the geom_segment below
 true_mu_betas_plotting = data.frame(true_val = true_mu_betas) %>%
-  mutate(ymin = as.numeric(as.factor(true_val)) - 0.3,
-         ymax = as.numeric(as.factor(true_val)) + 0.3)
+  mutate(ymin = as.numeric(true_val) - 0.1,
+         ymax = as.numeric(true_val) + 0.1)
 
 #plotting
-mu_beta_plot = mu_beta_draws %>% ggplot(aes(y = true_mu_beta, x = draw, colour = num_games)) +
-  stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
-  # geom_segment(data = true_mu_betas_plotting,
-  #              aes(x = true_val, xend = true_val, y = ymin, yend = ymax),
-  #              color = "red", linewidth = 1.25) +
-  labs(x = "Estimated Experiential Effect", y = "True mu_beta Value", colour = "Number of Games\nPlayed per Player") +
+mu_beta_plot = mu_beta_draws %>% ggplot(aes(x = draw, y = true_mu_beta)) +
+  stat_pointinterval(aes(group = interaction(true_mu_beta, num_games), colour = num_games), 
+                     position = ggstance::position_dodgev(height = 0.15)) +
+  geom_segment(data = true_mu_betas_plotting,
+               aes(x = true_val, xend = true_val, y = ymin, yend = ymax),
+               color = "red", linewidth = 1.1) +
+  labs(x = expression("Estimated " * mu[beta] * " Value"), 
+       y = expression("True " * mu[beta] * " Value"), 
+       colour = "Number of Games\nPlayed per Player") +
   geom_vline(aes(xintercept = 0), col = "black", linetype = "dashed") +
   theme_single_y_legend() +
   scale_x_continuous(breaks = c(0, signif(true_mu_betas, 3)), 
+                     labels = c(0, as.character(signif(true_mu_betas, 3)))) +
+  scale_y_continuous(breaks = c(0, signif(true_mu_betas, 3)), 
                      labels = c(0, as.character(signif(true_mu_betas, 3)))) +
   scale_color_viridis_d(option = "D")
 mu_beta_plot
