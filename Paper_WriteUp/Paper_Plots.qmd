@@ -35,6 +35,7 @@ library(PlayerRatings)
 library(ggrepel)
 library(ggpubr)
 library(rstanarm)
+library(ggh4x)
 options(mc.cores = parallel::detectCores())
 theme_set(theme_bw())
 
@@ -601,12 +602,16 @@ comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |>
   labs(x = element_blank(), y = element_blank(), color = element_blank()) +
   theme_3col() +
   theme(legend.position = "bottom") +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  facetted_pos_scales(x = list( #for customising scales on each facet
+    name == "mu_beta" ~ scale_x_continuous(breaks = c(-0.15, 0, 0.15), limits = c(-0.17, 0.17)),
+    name == "gamma1" ~ scale_x_continuous(breaks = breaks_pretty(n = 2)),
+    name == "gamma2" ~ scale_x_continuous(breaks = breaks_pretty(n = 2))
+  )) +
   scale_color_viridis_d(option = "H")
 
-# ggsave(plot = comp_global, 
-#        filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
-#        height = 5, width = 7)
+ggsave(plot = comp_global,
+       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
+       height = 5, width = 7)
 ```
 
 
@@ -1607,13 +1612,14 @@ true_mu_betas_plotting = data.frame(true_val = true_mu_betas) %>%
 #plotting
 mu_beta_plot = mu_beta_draws %>% ggplot(aes(y = true_mu_beta, x = draw, colour = num_games)) +
   stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
-  geom_segment(data = true_mu_betas_plotting,
-               aes(x = true_val, xend = true_val, y = ymin, yend = ymax),
-               color = "red", linewidth = 1.25) +
+  # geom_segment(data = true_mu_betas_plotting,
+  #              aes(x = true_val, xend = true_val, y = ymin, yend = ymax),
+  #              color = "red", linewidth = 1.25) +
   labs(x = "Estimated Experiential Effect", y = "True mu_beta Value", colour = "Number of Games\nPlayed per Player") +
+  geom_vline(aes(xintercept = 0), col = "black", linetype = "dashed") +
   theme_single_y_legend() +
-  scale_x_continuous(breaks = c(signif(true_mu_betas, 3)), 
-                     labels = c(as.character(signif(true_mu_betas, 3)))) +
+  scale_x_continuous(breaks = c(0, signif(true_mu_betas, 3)), 
+                     labels = c(0, as.character(signif(true_mu_betas, 3)))) +
   scale_color_viridis_d(option = "D")
 mu_beta_plot
 
