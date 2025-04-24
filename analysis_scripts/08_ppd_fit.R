@@ -57,7 +57,7 @@ small_data <- lichess_data |>
 
 ## when players play less than 10 games
 ## otherwise not needed
-users <- mid_games |>
+users <- small_data |>
   group_by(Username) |>
   tally() |>
   filter(n >= 10) |>
