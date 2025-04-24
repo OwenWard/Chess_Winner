@@ -118,5 +118,4 @@ fit <- mod$sample(data = stan_data_ave,
                   refresh = 100)
 
 #save fit
-fit$save_object(file = here(save_path,
-                            paste0("mid_fit.RDS")))
+fit$save_object(file = paste0(save_path, "mid_fit.RDS"))
