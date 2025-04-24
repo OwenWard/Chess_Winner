@@ -611,7 +611,7 @@ comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |>
 
 ggsave(plot = comp_global,
        filename = paste0(here("Paper_WriteUp", "paper_figures", "fig3.png")), dpi = 600,
-       height = 5, width = 7)
+       height = 3.5, width = 7)
 ```
 
 
