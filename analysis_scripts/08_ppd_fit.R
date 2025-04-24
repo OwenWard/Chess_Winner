@@ -55,6 +55,14 @@ small_data <- lichess_data |>
   filter(grepl("rated bullet game", Event)) |>
   distinct() #remove the duplicate rows if they exist
 
+## when players play less than 10 games
+## otherwise not needed
+users <- mid_games |>
+  group_by(Username) |>
+  tally() |>
+  filter(n >= 10) |>
+  pull(Username)
+
 #selecting previous 1000 to the final 1000 games for each player
 mid_games <- small_data |> 
   filter(Username %in% users) |> 
@@ -63,14 +71,6 @@ mid_games <- small_data |>
   slice_tail(n = 2000) |> 
   slice_head(n = 1000) |> 
   ungroup()
-
-## when players play less than 10 games
-## otherwise not needed
-users <- mid_games |>
-  group_by(Username) |>
-  tally() |>
-  filter(n >= 10) |>
-  pull(Username)
 
 tidy_games <- map_dfr(users, get_hist, mid_games, prev_n = n) |> 
   as_tibble() 
