@@ -34,6 +34,9 @@ path_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 
 n <- 1 ## number of games to use for history
 
+#what time control to fit model on
+time_control <- "bullet" #takes on "bullet" or "blitz" values only
+
 ### load in the data to use
 
 all_data_path <- rep(NA, 4)
@@ -42,11 +45,8 @@ all_data_path[1] <- here("box_data", "lichess1700-1900", "/")
 all_data_path[2] <- here("box_data", "lichess2000-2200", "/")
 all_data_path[3] <- here("box_data", "lichess2300-2500", "/")
 all_data_path[4] <- here("box_data", "lichessGrandmasters", "/")
+
 all_save_path[1] <- here("results_revision/lichess1700-1900/")
-
-# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
-# ## if need to run it locally
-
 all_save_path[2] <- here("results_revision/lichess2000-2200/")
 all_save_path[3] <- here("results_revision/lichess2300-2500/")
 all_save_path[4] <- here("results_revision/lichessGrandmasters/")
@@ -62,26 +62,13 @@ print(files)
 lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
-## restrict to rated rapid and shorter here
-## this also removes the NAs, which makes sense
 
 small_data <- lichess_data |>
   mutate(Event = tolower(Event)) |>
-  # filter(Event == "Rated Bullet game") |>
-  filter(TimeControl == "60+0") |>
-  filter(Variant == "Standard") |>
-  filter(grepl("rated bullet game", Event)) |>
+  filter(Event == paste("rated ", time_control, " game"),
+         Variant == "Standard") |>
+  filter(TimeControl %in% c("60+0", "180+0")) |> 
   distinct() #remove the duplicate rows if they exist
-
-
-# ## what time length should be
-# small_data <- lichess_data |>
-#   mutate(Event = tolower(Event)) |>
-#   filter(TimeControl == "180+0") |>
-#   filter(Variant == "Standard") |>
-#   filter(grepl("rated blitz game", Event))
-
-users <- unique(small_data$Username)
 
 ## when players play less than 10 games
 ## otherwise not needed
@@ -91,8 +78,7 @@ users <- small_data |>
   filter(n >= 10) |>
   pull(Username)
 
-saveRDS(users, file = paste0(save_path, "users_bullet.RDS"))
-# saveRDS(users, file = paste0(save_path, "users_blitz.RDS"))
+saveRDS(users, file = paste0(save_path, paste0("users_", time_control, ".RDS")))
 
 tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
   as_tibble() 
@@ -140,6 +126,5 @@ fit <- mod$sample(data = stan_data_ave,
                   refresh = 100)
 
 #save fit
-fit$save_object(file = here(save_path,
-                                 paste0("all_rated_bullet_model_n", n, ".RDS")))
+fit$save_object(file = here(save_path, paste0("all_rated_", time_control, "_model_n", n, ".RDS")))
 
