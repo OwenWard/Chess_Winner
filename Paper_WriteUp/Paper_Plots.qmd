@@ -1060,7 +1060,7 @@ magnus_id = which(users == "DrNykterstein") #magnus
 nihal_id = which(users == "nihalsarin2004") #nihal
 
 #choose who to plot
-focal_player_used = magnus_id
+focal_player_used = nihal_id
 
 #slightly less than 1000 games since filtered out draws
 focal_init_data = init_data |>
@@ -1201,13 +1201,13 @@ ppd_rating_plot = ggplot(data = true_glicko_first, aes(x = game, y = glicko)) +
 ppd_rating_plot
 
 # #save magnus
-# ggsave(plot = ppd_rating_plot, 
+# ggsave(plot = ppd_rating_plot,
 #        filename = here("Paper_WriteUp", "paper_figures", "fig7a.png"), dpi = 1000,
-#        height = 4.5, width = 10)
+#        height = 4, width = 6)
 # #save nihal
-# ggsave(plot = ppd_rating_plot, 
-#        filename = here("Paper_WriteUp", "paper_figures", "fig7b.png"), dpi = 1000,
-#        height = 4.5, width = 10)
+ggsave(plot = ppd_rating_plot,
+       filename = here("Paper_WriteUp", "paper_figures", "fig7b.png"), dpi = 1000,
+       height = 4, width = 6)
 ```
 
 
