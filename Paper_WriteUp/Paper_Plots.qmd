@@ -1032,8 +1032,7 @@ last_games = bullet_60 %>%
 tidy_games = map_dfr(users, get_hist, last_games, prev_n = 1) |> 
   as_tibble()
 
-#adding performance history
-init_data = tidy_games |>
+init_data <- tidy_games |>
   mutate(WhiteElo = as.numeric(WhiteElo),
          BlackElo = as.numeric(BlackElo),
          focal_user = ifelse(focal_white == 1, White, Black),
@@ -1048,12 +1047,13 @@ init_data = tidy_games |>
                 focal_win_prop, elo_diff, focal_result, opp, opp_rating,
                 focal_rating, UTCDateTime) |>
   group_by(focal_id) |>
-  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), 
-         ave_prop = ifelse(time_diff <= 300,  #if games played in diff sessions, make history same as draw (ie NULL)
-                           lag(focal_win_prop, default = 0.5), #removing standardization
-                           0.5)) |>
-  ungroup() |>
-  filter(focal_result != 0.5)
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
+         cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
+         ave_prop = ifelse(time_diff > 300 | is.na(time_diff),  
+                           cum_win_prob, #if games played in different session, history is their mean win prob up to the current game
+                           lag(focal_win_prop))) |> #if game played in same session, rolling mean over the past n games, removing standardization 
+  filter(focal_result != 0.5) %>%
+  ungroup()
 
 #ids of players to plot
 magnus_id = which(users == "DrNykterstein") #magnus
@@ -1094,6 +1094,7 @@ focal_draws = model$draws() |> as_draws_df() |>
 future_games_cov = tibble(focal = as.character(focal_init_data$focal_id),  
                           color = focal_init_data$focal_white,
                           elo_diff = focal_init_data$elo_diff,
+                          focal_result = focal_init_data$focal_result,
                           hist = focal_init_data$ave_prop,
                           focal_rating = focal_init_data$focal_rating,
                           opponent = focal_init_data$opp,
@@ -1112,9 +1113,6 @@ for (i in 1:num_games) {
 
   #indicator for colour effect, 1 is white, 0 is black
   colour_ind = curr_game_info$color
-
-  #elo diff for rating effect
-  rating_diff = curr_game_info$elo_diff
   
   #opponent name and rating
   opp = curr_game_info$opponent
@@ -1123,7 +1121,7 @@ for (i in 1:num_games) {
 
   #simulate wins/loss on current game
   for (j in 1:num_sims) {
-    curr_draw = focal_draws %>% filter(draw == j)
+    curr_draw = focal_draws %>% filter(draw == j) #current draw of parameters
 
   ## if first game use default history (0), otherwise use the previous
   if (i == 1) {
@@ -1133,6 +1131,9 @@ for (i in 1:num_games) {
     curr_hist = curr_game_info$hist
     curr_rating = glicko_sim[i - 1, j]
   }
+    
+  #rating diff in current game in jth simulation
+  rating_diff = curr_rating - opp_rating
 
   #find probability
   lin_comb = curr_draw$beta1 + (curr_draw$beta2 * curr_hist) +
