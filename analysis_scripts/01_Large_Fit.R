@@ -65,7 +65,7 @@ lichess_data <- files |>
 
 small_data <- lichess_data |>
   mutate(Event = tolower(Event)) |>
-  filter(Event == paste("rated ", time_control, " game"),
+  filter(Event == paste0("rated ", time_control, " game"),
          Variant == "Standard") |>
   filter(TimeControl %in% c("60+0", "180+0")) |> 
   distinct() #remove the duplicate rows if they exist
