@@ -1001,7 +1001,7 @@ procedures.
 model_path = here("results_revision", "lichessGrandmasters")
 
 #read in the model and users
-model = readRDS(file = here(model_path, "all_rated_bullet_model_prev_n1.RDS"))
+model = readRDS(file = here(model_path, "mid_fit.RDS"))
 users = readRDS(file = here(model_path, "users_bullet.RDS"))
 
 #grandmaster data
@@ -1017,13 +1017,11 @@ lichess_data = files %>%
 bullet_60 = lichess_data  %>%
   mutate(Event = tolower(Event)) %>%
   filter(Event == "rated bullet game", Variant == "Standard", TimeControl == "60+0") %>%
-  dplyr::select(c("White", "Black", "Result", "UTCDate", "UTCTime", "Username", "WhiteElo", "BlackElo"))
-
-#remove the duplicate rows
-bullet_60_no_dup = bullet_60[!duplicated(bullet_60),]
+  dplyr::select(c("White", "Black", "Result", "UTCDate", "UTCTime", "Username", "WhiteElo", "BlackElo")) %>%
+  distinct() #remove the duplicate rows if they exist
 
 #final 1000 games each user plays
-last_games = bullet_60_no_dup %>%
+last_games = bullet_60 %>%
   filter(Username %in% users) %>%  
   group_by(Username) %>%
   arrange(UTCDate, UTCTime, .by_group = TRUE) %>%
@@ -1167,7 +1165,7 @@ for (i in 1:num_games) {
 }
 
 #true glicko rating of all games before last 1000
-true_glicko_first = bullet_60_no_dup |> 
+true_glicko_first = bullet_60 |> 
   filter(Username == users[focal_player_used]) |> 
   arrange(UTCDate, UTCTime) |> 
   slice(1:(n() - 1000)) |> 
