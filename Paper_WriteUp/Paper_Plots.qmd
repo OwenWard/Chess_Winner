@@ -836,24 +836,27 @@ ggsave(plot = indiv_plot_gm,
 
 
 ```{r figure 5 left - compare global params n-1 vs n-10}
-## global effects first
-data_path <- here("results_2025/lichessGrandmasters")
-fit_gm_bullet_10 <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+model_path = here("results_revision", "lichessGrandmasters")
 
-prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
-                                        "gamma1", "gamma2")) |> 
+#GM n = 1 model
+fit_gm_bullet_prev = readRDS(file = here(model_path, "all_rated_bullet_model_n1.RDS"))
+
+#GM n = 10 model
+fit_gm_bullet_10 = readRDS(file = here(model_path, "all_rated_bullet_model_n10.RDS"))
+
+## global effects first
+prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Prev. Game")
 
-pre_10_pars <- fit_gm_bullet_10$draws(c("mu_beta",
-                                        "gamma1", "gamma2")) |> 
+prev_10_pars <- fit_gm_bullet_10$draws(c("mu_beta", "gamma1", "gamma2")) |> 
   as_draws_df() |> 
   pivot_longer(cols = "mu_beta":"gamma2") |> 
   mutate(model = "Prev. 10 Games")
 
-hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |> 
+#plot
+hist_comp_global <- bind_rows(prev_pars, prev_10_pars) |> 
   ggplot(aes(x = value, color = model)) +
   stat_pointinterval(position = position_dodge(width = 0.2)) +
   facet_wrap(~name,
@@ -865,9 +868,10 @@ hist_comp_global <- bind_rows(prev_pars, pre_10_pars) |>
   scale_x_continuous(breaks = breaks_pretty(n = 2)) +
   scale_color_viridis_d(option = "H")
 
+#save
 ggsave(plot = hist_comp_global, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "gm_comp_global.png")), dpi = 600,
+       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig5_left.png")), 
+       dpi = 600,
        height = 3.5, width = 7)
 ```
 
@@ -878,34 +882,31 @@ previous game only.
 ## Bullet vs Blitz for GM
 
 ```{r figure 5 right - bullet v blitz gm}
-data_path <- here("results_2025/lichessGrandmasters")
-fit_gm_bullet_prev <- readRDS(file = paste0(
-  data_path,
-  "/all_rated_bullet_model_prev_n1.RDS"
-))
-bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-fit_gm_blitz_prev <- readRDS(file = paste0(
-  data_path,
-  "/all_rated_blitz_model_prev_n1.RDS"
-))
-blitz_gm <- readRDS(file = paste0(data_path, "/users_blitz.RDS"))
+model_path = here("results_revision", "lichessGrandmasters")
+
+#GM bullet model
+fit_gm_bullet_prev = readRDS(file = here(model_path, "all_rated_bullet_model_n1.RDS"))
+
+#GM blitz model
+fit_gm_blitz_prev = readRDS(file = here(model_path, "all_rated_blitz_model_n1.RDS"))
+
+#users in each
+bullet_gm = readRDS(file = here(model_path, "users_bullet.RDS"))
+blitz_gm = readRDS(file = here(model_path, "users_blitz.RDS"))
+
+
 ## compare global effects first
-bullet_pars <- fit_gm_bullet_prev$draws(c(
-  "mu_beta",
-  "gamma1", "gamma2"
-)) |>
+bullet_pars <- fit_gm_bullet_prev$draws(c("mu_beta", "gamma1", "gamma2")) |>
   as_draws_df() |>
   pivot_longer(cols = "mu_beta":"gamma2") |>
   mutate(model = "Bullet")
 
-blitz_pars <- fit_gm_blitz_prev$draws(c(
-  "mu_beta",
-  "gamma1", "gamma2"
-)) |>
+blitz_pars <- fit_gm_blitz_prev$draws(c("mu_beta", "gamma1", "gamma2")) |>
   as_draws_df() |>
   pivot_longer(cols = "mu_beta":"gamma2") |>
   mutate(model = "Blitz")
 
+#plot
 bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
   ggplot(aes(x = value, y = name, color = model)) +
   stat_pointinterval(position = ggstance::position_dodgev(height = 0.5)) +
@@ -916,19 +917,21 @@ bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
   labs(x = element_blank(), y = element_blank(), color = element_blank()) +
   theme_3col() +
   theme(legend.position = "bottom") +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  facetted_pos_scales(x = list( #for customizing scales on each facet
+    name == "mu_beta" ~ scale_x_continuous(breaks = c(0, 0.5), limits = c(0, 0.6)),
+    name == "gamma1" ~ scale_x_continuous(breaks = breaks_pretty(n = 2)),
+    name == "gamma2" ~ scale_x_continuous(breaks = breaks_pretty(n = 2), limits = c(0.005, 0.0057))
+  )) +
+  #scale_x_continuous(breaks = breaks_pretty(n = 2)) +
   scale_color_viridis_d(option = "H")
 
-bul_blit_gm_comp_global
 
-ggsave(
-  plot = bul_blit_gm_comp_global,
-  filename = paste0(here(
-    "Paper_WriteUp", "paper_figures",
-    "bul_blitz_comp_gm_global.png"
-  )), dpi = 600,
-  height = 3.5, width = 7
-)
+
+#save
+ggsave(plot = bul_blit_gm_comp_global,
+       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig5_right.png")), 
+       dpi = 600,
+       height = 3.5, width = 7)
 ```
 
 
@@ -938,6 +941,7 @@ player_id <- as_tibble(bullet_gm) |>
   mutate(id = row_number()) |> 
   rename(player_name = value)
 
+#bullet parameter draws
 player_pars_bullet <- fit_gm_bullet_prev$draws() |> 
   as_draws_df() |>
   select(starts_with("beta[")) |>
@@ -951,6 +955,7 @@ player_pars_bullet <- fit_gm_bullet_prev$draws() |>
   left_join(player_id, by = "id") |> 
   mutate(model = "Bullet")
 
+#blitz parameter draws
 player_pars_blitz <- fit_gm_blitz_prev$draws() |> 
   as_draws_df() |>
   select(starts_with("beta[")) |>
@@ -964,6 +969,7 @@ player_pars_blitz <- fit_gm_blitz_prev$draws() |>
   left_join(player_id, by = "id") |> 
   mutate(model = "Blitz")
 
+#plot
 comp_gm_winner <- player_pars_bullet |> 
   filter(param == 2) |> 
   mutate(y = reorder(player_name, value, FUN = median)) |> 
@@ -977,13 +983,14 @@ comp_gm_winner <- player_pars_bullet |>
   theme_single_y() +
   theme(legend.position = "bottom") +
   scale_x_continuous(breaks = breaks_pretty(n = 3)) +
-  scale_color_viridis_d(option = "H")
+  scale_color_viridis_d(option = "H") + 
+  geom_vline(aes(xintercept = 0), col = "black", linetype = "dashed")
 
-comp_gm_winner
+#save
 ggsave(plot = comp_gm_winner, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "bul_blitz_comp_gm_winner.png")), dpi = 600,
-       height = 5, width = 7)
+       filename = paste0(here("Paper_WriteUp", "paper_figures", "fig6.png")), 
+       dpi = 600,
+       height = 7, width = 7)
 ```
 
 
