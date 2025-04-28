@@ -1652,20 +1652,17 @@ bullet_data_gm |>
 
 ```{r figure s1-left}
 #| eval: false
-data_path <- here("results_2025/lichess2000-2200")
+#read in model
+fit_20_22_bullet_prev = readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_n1.RDS"))
 
-fit_20_22_bullet_prev <- readRDS(file = 
-                                   paste0(data_path,
-                                          "/all_rated_bullet_model_prev_n1.RDS"))
-
-
-bullet_20_22 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-
+#read in users
+bullet_20_22 = readRDS(here("results_revision", "lichess2000-2200", "users_bullet.RDS"))
 
 player_id <- as_tibble(bullet_20_22) |> 
   mutate(id = row_number()) |> 
   rename(player_name = value)
   
+#draws of winner effects
 player_pars <- fit_20_22_bullet_prev$draws() |> 
   as_draws_df() |>
   select(starts_with("beta[")) |>
@@ -1678,20 +1675,20 @@ player_pars <- fit_20_22_bullet_prev$draws() |>
          param = as.numeric(param)) |> 
   left_join(player_id, by = "id")
 
-
+#plot
 winner_plot_20_22 <- player_pars |> 
   filter(param == 2) |> 
   mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
   ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
-  stat_histinterval() +
+  stat_pointinterval() +
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "2000-2200 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
 
+#save
 ggsave(plot = winner_plot_20_22, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "Figure_S1_left.png")), dpi = 600,
+       filename = here("Paper_WriteUp", "paper_figures", "FigS1_left.png"), dpi = 600,
        height = 7, width = 7)
 ```
 
@@ -1700,15 +1697,11 @@ ggsave(plot = winner_plot_20_22,
 
 ```{r figure-s1-right}
 #| eval: false
-data_path <- here("results_2025/lichess2300-2500")
+#read in model
+fit_20_22_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
 
-fit_23_25_bullet_prev <- readRDS(file = 
-                                   paste0(data_path,
-                                          "/all_rated_bullet_model_prev_n1.RDS"))
-
-
-bullet_23_25 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
-
+#read in users
+bullet_20_22 = readRDS(here("results_revision", "lichess2300-2500", "users_bullet.RDS"))
 
 player_id <- as_tibble(bullet_23_25) |> 
   mutate(id = row_number()) |> 
@@ -1726,20 +1719,20 @@ player_pars <- fit_23_25_bullet_prev$draws() |>
          param = as.numeric(param)) |> 
   left_join(player_id, by = "id")
 
-
+#plot
 winner_plot_23_25 <- player_pars |> 
   filter(param == 2) |> 
   mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
   ggplot(aes(y = reorder(player_name, prob, FUN = median), x = prob)) +
-  stat_histinterval() +
+  stat_pointinterval() +
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "2300-2500 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
 
+#save
 ggsave(plot = winner_plot_23_25, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "Figure_S1_right.png")), dpi = 600,
+       filename = here("Paper_WriteUp", "paper_figures", "FigS1_right.png"), dpi = 600,
        height = 7, width = 7)
 ```
 
