@@ -646,7 +646,7 @@ gamma_ests_gm <- fit_gm_bullet_prev$summary(variables = c("gamma1",
 
 ### Winner and Player Effects
 
-```{r player level parameters for 17-19}
+```{r figure 4 left}
 #| eval: false
 player_id <- as_tibble(bullet_17_19) |> 
   mutate(id = row_number()) |> 
@@ -664,35 +664,7 @@ player_pars <- fit_17_19_bullet_prev$draws() |>
          param = as.numeric(param)) |> 
   left_join(player_id, by = "id")
 
-## see what the smallest and largest posterior mean is 
-## for the winner effects
-player_pars |> 
-  group_by(player_name, param) |> 
-  summarise(post_mean = mean(value)) |> 
-  filter(param == 2) |> 
-  ungroup() |> 
-  slice_max(order_by = post_mean, n = 5)
-
-player_pars |> 
-  group_by(player_name, param) |> 
-  summarise(post_mean = mean(value)) |> 
-  filter(param == 2) |> 
-  ungroup() |> 
-  slice_min(order_by = post_mean, n = 5)
-
-## see how many contain 0
-player_pars |> 
-  group_by(player_name, param) |> 
-  filter(param == 2) |> 
-  summarise(lower = quantile(value, prob = 0.025),
-            upper = quantile(value, prob = 0.975)) |> 
-  mutate(contain_zero = ifelse(upper > 0 & lower < 0,
-                         1, 0)) |> 
-  filter(contain_zero == 0)
-```
-
-
-```{r figure 4 left}
+#plot
 winner_plot_17_19 <- player_pars |> 
   filter(param == 2) |> 
   mutate(prob = 1/(1 + exp( -1 * value)) - 0.5) |> 
