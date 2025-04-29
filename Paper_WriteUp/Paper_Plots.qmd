@@ -37,6 +37,7 @@ library(ggpubr)
 library(rstanarm)
 library(ggh4x)
 library(latex2exp)
+library(furrr)
 options(mc.cores = parallel::detectCores())
 theme_set(theme_bw())
 
@@ -1023,7 +1024,7 @@ init_data <- tidy_games |>
          opp = ifelse(focal_white == 1, Black, White),
          opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo),
          UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
-  dplyr::select(focal_user, focal_id, focal_white, WhiteElo, BlackElo,
+  dplyr::select(focal_user, focal_id, focal_white, WhiteElo, BlackElo, White, Black,
                 focal_win_prop, elo_diff, focal_result, opp, opp_rating,
                 focal_rating, UTCDateTime) |>
   group_by(focal_id) |>
@@ -1034,6 +1035,7 @@ init_data <- tidy_games |>
                            lag(focal_win_prop))) |> #if game played in same session, rolling mean over the past n games, removing standardization 
   filter(focal_result != 0.5) %>%
   ungroup()
+
 
 #ids of players to plot
 magnus_id = which(users == "DrNykterstein") #magnus
@@ -1069,7 +1071,6 @@ focal_draws = model$draws() |> as_draws_df() |>
   filter(draw %in% 1:num_sims)
   
   
-
 ## the covariates for the future games
 future_games_cov = tibble(focal = as.character(focal_init_data$focal_id),  
                           color = focal_init_data$focal_white,
@@ -1086,10 +1087,6 @@ rd_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the RDs
 volatility_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the volatilities
 game_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the game results
 #probs = matrix(NA, nrow = num_games, ncol = num_sims) #for debugging
-
-
-### SET FIRST RD, VOLATILITY TO TRUE RD/VOLATILITY WE GET AFTER FINDING RDS/VOLATILITY IN RAW DATASET (IN INIT CALCULATION)
-
 
 #sim
 set.seed(2025)
@@ -2123,7 +2120,7 @@ ggsave(plot = comp_gm_player,
 
 #distribution of x_{ij} - for response to reviewer comment
 ```{r}
-#import GM data
+#import data
 data_path = paste0(all_data_path[1], "/")
 
 files <- list.files(data_path)
@@ -2197,5 +2194,87 @@ ggsave(plot = prop_dist,
        filename = here("Paper_WriteUp", "paper_figures", "response to comments", "prop_xij.png"), dpi = 1000,
        height = 4, width = 6)
 ```
+
+
+#plotting RDs and volatilities for reviewer response
+```{r}
+#import data
+data_path = paste0(all_data_path[1], "/")
+
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+small_data <- lichess_data |>
+  mutate(Event = tolower(Event)) |>
+  filter(Event == paste0("rated ", time_control, " game"),
+         Variant == "Standard") |>
+  filter(TimeControl %in% c("60+0", "180+0")) |> 
+  distinct() #remove the duplicate rows if they exist
+
+## otherwise not needed
+users <- small_data |>
+  group_by(Username) |>
+  tally() |>
+  filter(n >= 10) |>
+  pull(Username)
+
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
+  as_tibble() 
+
+start = Sys.time()
+init_data <- tidy_games |>
+  mutate(WhiteElo = as.numeric(WhiteElo),
+         BlackElo = as.numeric(BlackElo),
+         focal_user = ifelse(focal_white == 1, White, Black),
+         elo_diff = ifelse(focal_white == 1,
+                           WhiteElo - BlackElo, BlackElo - WhiteElo),
+         focal_id = match(focal_user, users),
+         focal_rating = ifelse(focal_white == 1, WhiteElo, BlackElo),
+         opp = ifelse(focal_white == 1, Black, White),
+         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo),
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
+  dplyr::select(focal_user, focal_id, focal_white, WhiteElo, BlackElo, White, Black,
+                focal_win_prop, elo_diff, focal_result, opp, opp_rating,
+                focal_rating, UTCDateTime) |>
+  group_by(focal_id) |>
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
+         cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
+         ave_prop = ifelse(time_diff > 300 | is.na(time_diff),  
+                           cum_win_prob, #if games played in different session, history is their mean win prob up to the current game
+                           lag(focal_win_prop))) |> #if game played in same session, rolling mean over the past n games, removing standardization 
+  filter(focal_result != 0.5) %>%
+  ungroup()
+
+#get RDs
+init_RDs = future_map_dfr(users, get_RDs, init_data) |>
+  as_tibble()
+
+end = Sys.time()
+end - start #takes like 20 minutes
+
+#RDs
+RD_plot = ggplot(data = init_RDs %>% group_by(focal_user) %>% mutate(index = row_number()), mapping = aes(x = index, y = RD)) +
+  geom_line() +
+  scale_x_continuous(n.breaks = 3) +
+  facet_wrap(~focal_user)
+
+#save
+ggsave(plot = RD_plot,
+       filename = here("Paper_WriteUp", "paper_figures", "response to comments", "RDs.png"), dpi = 1000,
+       height = 6, width = 8)
+
+#volatilities
+vol_plot = ggplot(data = init_RDs %>% group_by(focal_user) %>% mutate(index = row_number()), mapping = aes(x = index, y = volatility)) +
+  geom_line() +
+  scale_x_continuous(n.breaks = 3) +
+  facet_wrap(~focal_user)
+
+#save
+ggsave(plot = vol_plot,
+       filename = here("Paper_WriteUp", "paper_figures", "response to comments", "volatilities.png"), dpi = 1000,
+       height = 6, width = 8)
+```
+
 
 
