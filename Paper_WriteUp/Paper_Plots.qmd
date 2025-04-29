@@ -36,6 +36,7 @@ library(ggrepel)
 library(ggpubr)
 library(rstanarm)
 library(ggh4x)
+library(latex2exp)
 options(mc.cores = parallel::detectCores())
 theme_set(theme_bw())
 
@@ -2105,4 +2106,83 @@ ggsave(plot = comp_gm_player,
                               "bul_blitz_comp_gm_player.png")), dpi = 600,
        height = 5, width = 7)
 ```
+
+
+#distribution of x_{ij} - for response to reviewer comment
+```{r}
+#import GM data
+data_path = paste0(all_data_path[1], "/")
+
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+small_data <- lichess_data |>
+  mutate(Event = tolower(Event)) |>
+  filter(Event == paste0("rated ", time_control, " game"),
+         Variant == "Standard") |>
+  filter(TimeControl %in% c("60+0", "180+0")) |> 
+  distinct() #remove the duplicate rows if they exist
+
+## otherwise not needed
+users <- small_data |>
+  group_by(Username) |>
+  tally() |>
+  filter(n >= 10) |>
+  pull(Username)
+
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
+  as_tibble() 
+
+init_data <- tidy_games |>
+  mutate(WhiteElo = as.numeric(WhiteElo),
+         BlackElo = as.numeric(BlackElo),
+         focal_user = ifelse(focal_white == 1, White, Black),
+         elo_diff = ifelse(focal_white == 1,
+                           WhiteElo - BlackElo, BlackElo - WhiteElo),
+         focal_id = match(focal_user, users),
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
+  dplyr::select(focal_user, focal_id, focal_white, 
+                focal_win_prop, elo_diff, focal_result,
+                UTCDateTime) |>
+  group_by(focal_id) |>
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
+         cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
+         ave_prop = ifelse(time_diff > 300 | is.na(time_diff),  #current way we evaluate history
+                           0, 
+                           lag(focal_win_prop) - cum_win_prob),
+         ave_prop2 = ifelse(time_diff > 300 | is.na(time_diff), #proposed way we evaluate history
+                            0.5, 
+                            lag(focal_win_prop))) |> 
+  filter(focal_result != 0.5) %>%
+  ungroup()
+
+#just filter for one player for illustration
+init_data_plot = init_data %>% filter(focal_id == 1)
+
+#distribution of x_ij for current way we evaluate history
+curr_dist = ggplot(data = init_data_plot, mapping = aes(x = ave_prop)) +
+  geom_histogram() + 
+  labs(title = "Normalization", x = TeX("$\\tilde{x}_{ij}^n$"), y = "Count") + 
+  scale_x_continuous(breaks = c(-0.5, -0.25, 0, 0.25, 0.5), labels = c(-0.5, -0.25, 0, 0.25, 0.5)) + 
+  theme_single_y()
+
+#save
+ggsave(plot = curr_dist,
+       filename = here("Paper_WriteUp", "paper_figures", "response to comments", "curr_xij.png"), dpi = 1000,
+       height = 4, width = 6)
+
+#distribution of x_ij for proposed way to evaluate history
+prop_dist = ggplot(data = init_data_plot, mapping = aes(x = ave_prop2)) +
+  geom_histogram() + 
+  labs(title = "No Normalization", x = TeX("$\\tilde{x}_{ij}^n$"), y = "Count") + 
+  scale_x_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1), limits = c(-0.2, 1.2)) + 
+  theme_single_y()
+
+#save
+ggsave(plot = prop_dist,
+       filename = here("Paper_WriteUp", "paper_figures", "response to comments", "prop_xij.png"), dpi = 1000,
+       height = 4, width = 6)
+```
+
 
