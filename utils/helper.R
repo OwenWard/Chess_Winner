@@ -62,6 +62,67 @@ get_hist <- function(user, games, prev_n) {
   hist_games
 }
 
+
+#RDs/Volatility calculation
+
+#returns dataframe with RDs and volatilities for some user
+#meant to be run on init_data only
+get_RDs = function(user, games) { 
+  focal_games = games %>% filter(focal_user == user) 
+  
+  #storage
+  RDs = numeric(length = nrow(focal_games))
+  vols = numeric(length = nrow(focal_games))
+  
+  #loop through each game to use true ratings and get estimated RD/volatility
+  for (i in 1: nrow(focal_games)) {
+    curr_row = focal_games[i,]
+    
+    focal_name = curr_row$focal_user #focal players name
+    focal_rating = curr_row$focal_rating #focal players rating
+    opp_name = curr_row$opp #opponent name
+    opp_rating = curr_row$opp_rating #opponent rating
+    
+    result = curr_row$focal_result
+    colour_ind = ifelse(curr_row$focal_white == 1, 1, -1)
+    
+    #these are for the focal player
+    if (i == 1) { #guess parameters
+      curr_RD = 100
+      curr_volatility = 0.06
+    } else { #use the previously estimated parameters
+      curr_RD = RDs[i - 1]
+      curr_volatility = vols[i - 1]
+    }
+    
+    games = data.frame("Time" = i,
+                       "Player1" = focal_name,
+                       "Player2" = opp,
+                       "Result" = result)
+    initstate = data.frame("Player" = c(focal_name, opp_name),
+                           "Rating" = c(focal_rating, opp_rating),
+                           "Deviation" = c(curr_RD, 200), #doesnt matter what opponents RD/volatility is
+                           "Volatility" = c(curr_volatility, 0.05))
+    
+    #get updated rating, RDs, volatility
+    glicko2 = glicko2(games, status = initstate, history = TRUE, gamma = colour_ind)
+    
+    #extract the rating of focal player and store it
+    focal_glick = glicko2$history[focal_name, ,]
+    
+    #store them
+    RDs[i] = as.numeric(focal_glick)[2]
+    vols[i] = as.numeric(focal_glick)[3]
+  }
+  #put results back into dataframe
+  focal_games = focal_games %>% 
+    mutate(RD = RDs,
+           volatility = vols)
+}
+
+
+
+
 ## extract the sessions containing more than 1 game
 get_true_sequences <- function(x) {
   rle_x <- rle(x)
