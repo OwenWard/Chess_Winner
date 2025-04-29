@@ -1081,9 +1081,15 @@ future_games_cov = tibble(focal = as.character(focal_init_data$focal_id),
                           opponent_rating = focal_init_data$opp_rating) 
 
 #storage
-glicko_sim = matrix(NA, nrow = num_games, ncol = num_sims)
-game_sim = matrix(NA, nrow = num_games, ncol = num_sims)
+glicko_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the ratings
+rd_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the RDs
+volatility_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the volatilities
+game_sim = matrix(NA, nrow = num_games, ncol = num_sims) #storing the game results
 #probs = matrix(NA, nrow = num_games, ncol = num_sims) #for debugging
+
+
+### SET FIRST RD, VOLATILITY TO TRUE RD/VOLATILITY WE GET AFTER FINDING RDS/VOLATILITY IN RAW DATASET (IN INIT CALCULATION)
+
 
 #sim
 set.seed(2025)
@@ -1106,10 +1112,15 @@ for (i in 1:num_games) {
   ## if first game use default history (0), otherwise use the previous
   if (i == 1) {
     curr_rating = curr_game_info$focal_rating
-    curr_hist = 0.5 #assume they're current past performance is at their usual level
+    curr_rd = 50 #starting value for rating deviation
+    curr_volatility = 0.04 #starting value for volatility
+    curr_hist = 0 #assume they're current past performance is NULL
   } else {
-    curr_hist = curr_game_info$hist
+    #use rating info from past game
     curr_rating = glicko_sim[i - 1, j]
+    curr_rd = rd_sim[i - 1, j]
+    curr_volatility = volatility_sim[i - 1, j]
+    curr_hist = curr_game_info$hist
   }
     
   #rating diff in current game in jth simulation
@@ -1131,15 +1142,17 @@ for (i in 1:num_games) {
                      Score = sim_result)
   initstate = tibble(Player = c(users[focal_player_used], opp),
                      Rating = c(curr_rating, opp_rating),
-                     Deviation = 50,
-                     Volatility = 0.04)
+                     Deviation = curr_rd,
+                     Volatility = curr_volatility)
     
   sim_glick = glicko2(games, status = initstate, history = TRUE, gamma = colour_ind)
   ## extract the rating of focal player and store it
   focal_glick = sim_glick$history[users[focal_player_used], ,]
     
-  #store current result and rating
+  #store current result and rating info
   glicko_sim[i, j] = as.numeric(focal_glick)[1]
+  rd_sim[i, j] = as.numeric(focal_glick)[2]
+  volatility_sim[i, j] = as.numeric(focal_glick)[3]
   game_sim[i, j] = sim_result
   }
   if(i %% 10 == 0) {print(i)} #progress of number of games simulated
