@@ -10,7 +10,6 @@
 
 ##### April 15, 2025 ######
 #' Adam revision 
-#' removing the standardization of x_ij term
 #' also assuming games played in different sessions have no relation, so make their history NULL (ie same as their historical avg past performance)
 #' removing all the plots and stuff after we save the fit, we don't use that anymore
 
@@ -98,8 +97,8 @@ init_data <- tidy_games |>
   mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
          cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
          ave_prop = ifelse(time_diff > 300 | is.na(time_diff),  
-                           cum_win_prob, #if games played in different session, history is their mean win prob up to the current game
-                           lag(focal_win_prop))) |> #if game played in same session, rolling mean over the past n games, removing standardization 
+                           0, #if games played in different session, history is their mean win prob up to the current game
+                           lag(focal_win_prop) - cum_win_prob)) |> #if game played in same session, rolling mean over the past n games
   filter(focal_result != 0.5) %>%
   ungroup()
 
