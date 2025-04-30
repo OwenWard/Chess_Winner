@@ -86,20 +86,17 @@ init_data <- tidy_games |>
          focal_user = ifelse(focal_white == 1, White, Black),
          elo_diff = ifelse(focal_white == 1,
                            WhiteElo - BlackElo, BlackElo - WhiteElo),
-         focal_id = match(focal_user, users),
-         focal_rating = ifelse(focal_white == 1, WhiteElo, BlackElo),
-         opp = ifelse(focal_white == 1, Black, White),
-         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo),
+         focal_id = match(focal_user, users), 
          UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
-  dplyr::select(focal_user, focal_id, focal_white, WhiteElo, BlackElo, White, Black,
-                focal_win_prop, elo_diff, focal_result, opp, opp_rating,
-                focal_rating, UTCDateTime) |>
+  dplyr::select(focal_user, focal_id, focal_white, 
+                focal_win_prop, elo_diff, focal_result,
+                UTCDateTime) |>
   group_by(focal_id) |>
   mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
          cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
          ave_prop = ifelse(time_diff > 300 | is.na(time_diff),  
                            0, #if games played in different session, history is their mean win prob up to the current game
-                           lag(focal_win_prop) - cum_win_prob)) |> #if game played in same session, rolling mean over the past n games, removing standardization 
+                           lag(focal_win_prop) - cum_win_prob)) |> #if game played in same session, rolling mean over the past n games
   filter(focal_result != 0.5) %>%
   ungroup()
 
