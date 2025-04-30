@@ -10,6 +10,7 @@ library(posterior)
 library(bayesplot)
 library(loo)
 library(here)
+library(furrr)
 
 options(mc.cores = parallel::detectCores())
 
