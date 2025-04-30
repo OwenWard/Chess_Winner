@@ -28,7 +28,6 @@ data {
 
 
 parameters {
-  // vector[2] nu;                        // location of beta[ , j]
   real mu_beta;
   vector<lower=0>[2] tau;              // scale of beta[ , j], sd of effects
   cholesky_factor_corr[2] L_Omega;     // Cholesky of correlation of beta[ , j]
@@ -41,20 +40,17 @@ parameters {
 }
 transformed parameters {
   vector[2] nu = [0, mu_beta]';
-  matrix[2, J] beta = rep_matrix(nu, J)
-                      + diag_pre_multiply(tau, L_Omega) * beta_std;
-  // real mu_beta = nu[2];     // population average winner effect
+  matrix[2, J] beta = rep_matrix(nu, J) + diag_pre_multiply(tau, L_Omega) * beta_std;
 }
 
 model {
-  sigma_g1 ~ normal(0, 1);          // prior for sd of gamma1
-  sigma_g2 ~ normal(0, 1);          // prior for sd of gamma2
+  sigma_g1 ~ normal(0, 1);             // prior for sd of gamma1
+  sigma_g2 ~ normal(0, 1);             // prior for sd of gamma2
   gamma1 ~ normal(0, sigma_g1);        // prior for gamma1
   gamma2 ~ normal(0, sigma_g2);        // prior for gamma2
   sigma_1 ~ normal(0, 1);
-  // nu[1] ~ normal(0, 1);
-  mu_beta ~ normal(0, sigma_1);          // prior for population winner effect
-  tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
+  mu_beta ~ normal(0, sigma_1);        // prior for population winner effect
+  tau ~ normal(0, 1);                  // prior for sd of both random effects
   L_Omega ~ lkj_corr_cholesky(2);      // prior for correlation matrix
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
   vector[N] pred;
@@ -65,26 +61,3 @@ model {
   y ~ bernoulli_logit(pred);
 }
 
-
-/**
-* generated quantities below compute posterior predictive draws and
-* log likelihood for computing and comparing loo scores
-* for full data this is too large to store, can only be run sometimes
-**/
-
-
-
-// generated quantities {
-//   vector[N] log_lik;
-//   vector[N] y_rep;
-//   for (n in 1:N) {
-//     log_lik[n] = bernoulli_logit_lpmf(y[n] | beta[1, id[n]] +
-//     beta[2, id[n]] * win_prop[n] +
-//     gamma1 * colour[n] + gamma2 * elo[n]);
-// 
-//     // generate posterior predictive samples
-//     y_rep[n] = bernoulli_logit_rng(beta[1, id[n]] +
-//     beta[2, id[n]] * win_prop[n] +
-//     gamma1 * colour[n] + gamma2 * elo[n]);
-//   }
-// }
