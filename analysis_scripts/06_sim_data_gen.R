@@ -58,13 +58,10 @@ betas = mu_beta + rnorm(n = num_players, mean = 0, sd = 0.1) #mu_beta plus some 
 
 
 #' now simulate the games for this player 
-#' 
-#' 
-#' RIGHT NOW THIS IS USING NO STANDARISATION!!! JUST USES 0, 0.5, 1 AS HISTORY FOR BETA
 
 #for storage
 sim_games = data.frame("player_id" = as.numeric(), "result" = as.numeric(), "colour" = as.numeric(), 
-                       "rating_diff" = as.numeric(), "last_result" = as.numeric(), "beta" = as.numeric(), 
+                       "rating_diff" = as.numeric(), "last_result" = as.numeric(), "ave_prop" = numeric(), "beta" = as.numeric(), 
                        "mu_beta" = as.numeric(), "alpha" = as.numeric(), "gamma1" = as.numeric(), "gamma2" = as.numeric())
 for(i in 1:num_games) {
   #current covariate (game) info
@@ -74,13 +71,16 @@ for(i in 1:num_games) {
   curr_colour = sample(c(0, 1), prob = c(0.5, 0.5), size = 1) #1 is white, 0 is black
   last_result = ifelse(i == 1, 0.5, sim_games$result[i - 1]) #assume first game history is same as draw
   
+  cum_win_prob = ifelse(i == 1, 0.5, mean(sim_games$last_result)) #the cumulative mean for focal player
+  curr_xij = last_result - cum_win_prob
+  
   #sim result
-  lin_comb = alphas[player_id] + betas[player_id]*last_result + gamma1*curr_colour + gamma2*curr_rating_diff #the predictors
+  lin_comb = alphas[player_id] + betas[player_id]*curr_xij + gamma1*curr_colour + gamma2*curr_rating_diff #the predictors
   curr_win_prob = invlogit(lin_comb) #simulate probability
   curr_result = sample(c(1, 0), prob = c(curr_win_prob, 1 - curr_win_prob), size = 1)
   
   #store everything - player number, result, colour, rating diff, last result, parameter values
-  sim_games[i,] = c(player_id, curr_result, curr_colour, curr_rating_diff, last_result, 
+  sim_games[i,] = c(player_id, curr_result, curr_colour, curr_rating_diff, last_result, curr_xij,
                     betas[player_id], mu_beta, alphas[player_id], gamma1, gamma2) #the row for this data set
 }
 
