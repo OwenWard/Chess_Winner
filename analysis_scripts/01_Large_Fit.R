@@ -87,11 +87,10 @@ init_data <- tidy_games |>
          elo_diff = ifelse(focal_white == 1,
                            WhiteElo - BlackElo, BlackElo - WhiteElo),
          focal_id = match(focal_user, users), 
-         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime),
-         #adding info for RDs
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime)),
          focal_rating = ifelse(focal_white == 1, WhiteElo, BlackElo),
          opp = ifelse(focal_white == 1, Black, White),
-         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo))) |>
+         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo)) |>
   dplyr::select(focal_user, focal_id, focal_white, 
                 focal_win_prop, elo_diff, focal_result,
                 UTCDateTime) |>
