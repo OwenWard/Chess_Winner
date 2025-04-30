@@ -97,7 +97,7 @@ get_RDs = function(user, games) {
     
     games = data.frame("Time" = i,
                        "Player1" = focal_name,
-                       "Player2" = opp,
+                       "Player2" = opp_name,
                        "Result" = result)
     initstate = data.frame("Player" = c(focal_name, opp_name),
                            "Rating" = c(focal_rating, opp_rating),
