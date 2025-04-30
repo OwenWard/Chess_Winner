@@ -44,14 +44,14 @@ init_data = sim_data %>%
   group_by(player_id) %>%
   slice_head(n = curr_num_games) #slice the correct number of games
 
-#right now not standardizing, so history for prev_n = 1 is just 0, 0.5, 1...
+#data for stan
 stan_sim_data = list(N = nrow(init_data),
                      J = init_data$player_id %>% unique() %>% length(),
                      y = init_data$result,
                      id = init_data$player_id,
                      colour = init_data$colour,
                      elo = init_data$rating_diff,
-                     win_prop = init_data$last_result)
+                     win_prop = init_data$ave_prop)
 
 ### FITTING ###
 
