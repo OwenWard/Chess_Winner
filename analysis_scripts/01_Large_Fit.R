@@ -4,13 +4,11 @@
 ## games on a cluster
 ## stan model is somewhat optimized for speed to fit to faster, using 
 ## matrix multiplication
-##
-
 
 
 ##### April 15, 2025 ######
 #' Adam revision 
-#' also assuming games played in different sessions have no relation, so make their history NULL (ie same as their historical avg past performance)
+#' Assuming games played in different sessions have no relation, so make their history NULL (0)
 #' removing all the plots and stuff after we save the fit, we don't use that anymore
 
 
@@ -88,8 +86,12 @@ init_data <- tidy_games |>
          focal_user = ifelse(focal_white == 1, White, Black),
          elo_diff = ifelse(focal_white == 1,
                            WhiteElo - BlackElo, BlackElo - WhiteElo),
-         focal_id = match(focal_user, users),
-         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime))) |>
+         focal_id = match(focal_user, users), 
+         UTCDateTime = ymd_hms(paste0(UTCDate, "_", UTCTime),
+         #adding info for RDs
+         focal_rating = ifelse(focal_white == 1, WhiteElo, BlackElo),
+         opp = ifelse(focal_white == 1, Black, White),
+         opp_rating = ifelse(focal_white == 1, BlackElo, WhiteElo))) |>
   dplyr::select(focal_user, focal_id, focal_white, 
                 focal_win_prop, elo_diff, focal_result,
                 UTCDateTime) |>
