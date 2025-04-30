@@ -32,10 +32,10 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results_revision/lichess1700-1900/")
-all_save_path[2] <- here("results_revision/lichess2000-2200/")
-all_save_path[3] <- here("results_revision/lichess2300-2500/")
-all_save_path[4] <- here("results_revision/lichessGrandmasters/")
+all_save_path[1] <- here("results_revision_may/lichess1700-1900/")
+all_save_path[2] <- here("results_revision_may/lichess2000-2200/")
+all_save_path[3] <- here("results_revision_may/lichess2300-2500/")
+all_save_path[4] <- here("results_revision_may/lichessGrandmasters/")
 
 
 data_path <- all_data_path[path_id]
@@ -97,9 +97,10 @@ hist_data_init <- tidy_games |>
          focal_win_prop, elo_diff, focal_result) |> 
   group_by(focal_id) |> 
   mutate(ave_prop = lag(focal_win_prop, n = 1, default = 0) - 
-           mean(focal_result), 
+           lag(cummean(focal_result), default = 0), 
          ## focal_win_prop is the average of the running win proportion
-         prev_game = lag(focal_result, default = 0)) |> # - mean(focal_result)) |> 
+         prev_game = lag(focal_result, default = 0) - 
+           lag(cummean(focal_result), default = 0))  |> 
   filter(focal_result != 0.5)
 
 
@@ -109,6 +110,8 @@ cat("----------\n")
 
 ### then fit the models
 
+## check only
+hist_data_init <- hist_data_init[1:5000, ]
 
 stan_data_ave <- list(N = nrow(hist_data_init),
                       J = length(users),
@@ -128,7 +131,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
-                       refresh = 100)
+                       refresh = 100,iter_warmup = 100, iter_sampling = 100)
 
 ## save the stan fit as not actually that large here
 

@@ -54,7 +54,7 @@ model {
   sigma_1 ~ normal(0, 1);
   // nu[1] ~ normal(0, 1);
   mu_beta ~ normal(0, sigma_1);          // prior for population winner effect
-  tau ~ inv_gamma(1, 1);               // prior for sd of both random effects
+  tau ~ normal(0, 1); //inv_gamma(1, 1);               // prior for sd of both random effects
   L_Omega ~ lkj_corr_cholesky(2);      // prior for correlation matrix
   to_vector(beta_std) ~ normal(0, 1);  // beta[ , j] ~ multi_normal(nu, Sigma)
   vector[N] pred;

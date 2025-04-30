@@ -33,14 +33,10 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
-all_save_path[1] <- here("results_revision/lichess1700-1900/")
-
-# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
-# ## if need to run it locally
-
-all_save_path[2] <- here("results_revision/lichess2000-2200/")
-all_save_path[3] <- here("results_revision/lichess2300-2500/")
-all_save_path[4] <- here("results_revision/lichessGrandmasters/")
+all_save_path[1] <- here("results_revision_may/lichess1700-1900/")
+all_save_path[2] <- here("results_revision_may/lichess2000-2200/")
+all_save_path[3] <- here("results_revision_may/lichess2300-2500/")
+all_save_path[4] <- here("results_revision_may/lichessGrandmasters/")
 
 
 data_path <- all_data_path[path_id]
@@ -99,7 +95,8 @@ init_data <- tidy_games |>
   select(focal_user, focal_id, focal_white,
          focal_win_prop, elo_diff, focal_result) |>
   group_by(focal_id) |>
-  mutate(ave_prop = lag(focal_win_prop, default = 0)) |> # - mean(focal_result)) |>
+  mutate(ave_prop = lag(focal_win_prop, n = 1, default = 0) - 
+           lag(cummean(focal_result), default = 0))
   filter(focal_result != 0.5)
 
 cat("----------\n")
