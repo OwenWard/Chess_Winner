@@ -89,7 +89,7 @@ get_RDs = function(user, games) {
     #these are for the focal player
     if (i == 1) { #guess parameters
       curr_RD = 100
-      curr_volatility = 0.06
+      curr_volatility = 0.05
     } else { #use the previously estimated parameters
       curr_RD = RDs[i - 1]
       curr_volatility = vols[i - 1]
@@ -105,7 +105,7 @@ get_RDs = function(user, games) {
                            "Volatility" = c(curr_volatility, 0.05))
     
     #get updated rating, RDs, volatility
-    glicko2 = glicko2(games, status = initstate, history = TRUE, gamma = colour_ind)
+    glicko2 = glicko2(games, status = initstate, history = TRUE, gamma = colour_ind, tau = 0.5)
     
     #extract the rating of focal player and store it
     focal_glick = glicko2$history[focal_name, ,]
