@@ -11,6 +11,7 @@ library(bayesplot)
 library(loo)
 library(here)
 library(furrr)
+library(PlayerRatings)
 
 options(mc.cores = parallel::detectCores())
 
