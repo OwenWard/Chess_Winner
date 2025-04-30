@@ -31,7 +31,7 @@ num_games = 20000 #this is roughly the same as the number of games per player in
 #' we vary the experiential effect size and number of games per player to see how well our model can detect true experiential effects
 #' experiential effects size of logit(0.51) represents 1% increase win percentage when coming from a win... logit(0.53) represents 3% increase...
 #mu_beta_sizes = c(logit(0.51), logit(0.53), logit(0.6)) #these are the mu_betas
-mu_beta_sizes = c(-0.5, 0, 0.5)
+mu_beta_sizes = c(-0.5, 0.12, 0.5)
 
 #' if we want to fit our model using smaller number of games, just take a subset of these 20,000 games
 #' 
