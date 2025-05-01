@@ -1191,258 +1191,13 @@ ppd_rating_plot = ggplot(data = true_glicko_first, aes(x = game, y = glicko)) +
 ppd_rating_plot
 
 # #save magnus
-ggsave(plot = ppd_rating_plot,
-       filename = here("Paper_WriteUp", "paper_figures", "fig7a.png"), dpi = 1000,
-       height = 4, width = 6)
+# ggsave(plot = ppd_rating_plot,
+#        filename = here("Paper_WriteUp", "paper_figures", "fig7a.png"), dpi = 1000,
+#        height = 4, width = 6)
 # #save nihal
 # ggsave(plot = ppd_rating_plot,
 #        filename = here("Paper_WriteUp", "paper_figures", "fig7b.png"), dpi = 1000,
 #        height = 4, width = 6)
-```
-
-
-### Permuting for 1700-1900
-
-```{r perm for 17-19}
-#| eval: false
-perm_data_path <- here("results/lichess1700-1900_2025/perm")
-
-path_id <- 1
-data_path <- res_data_path[path_id]
-(perm_files <- list.files(perm_data_path))
-
-perm_17_19 <- perm_files[1:1000] |>
-  map_dfr(~ read_rds(here(perm_data_path, .x)))
-
-sim_pars <- perm_17_19 |>
-  select(variable, mean, sim_id)
-
-data_path <- here("results/lichess1700-1900_2025")
-
-fit_17_19_bullet_prev <- readRDS(file = 
-                                   paste0(data_path,
-                                          "/all_rated_bullet_model_prev_n1.RDS"))
-
-
-bullet_17_19 <- readRDS(file = paste0(
-  data_path,
-  "/users_bullet.RDS"
-))
-
-## then need to overlay the true values also
-true_values <- fit_17_19_bullet_prev$summary() |>
-  filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |>
-  select(variable, mean)
-
-perm_17_19_global <- sim_pars |>
-  filter(variable %in% c(
-    "mu_beta", "gamma1", "gamma2")) |>
-  ggplot(aes(mean)) +
-  geom_histogram() +
-  facet_wrap(~variable, scales = "free") +
-  geom_vline(
-    data = true_values,
-    mapping = aes(xintercept = mean),
-    col = "red"
-  ) +
-  theme_3col() +
-  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
-  labs(x = element_blank(), y = element_blank())
-
-perm_17_19_global
-
-ggsave(
-  plot = perm_17_19_global,
-  filename = paste0(here(
-    "Paper_WriteUp", "paper_figures",
-    "perm_17_19_global.png"
-  )), dpi = 600,
-  height = 5, width = 7
-)
-```
-
-
-```{r figure 8 left - perm winner effects}
-
-player_pars <- sim_pars |> 
-  as_draws_df() |> 
-  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
-         id = stringr::str_extract(variable, pattern = "\\d+]"),
-         id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) |> 
-  drop_na() |> 
-  select(param, id, mean, sim_id) |> 
-  mutate(id = as.numeric(id)) |> 
-  left_join(player_id, by = "id")
-
-perm_players <- unique(player_pars$player_name)
-
-true_beta <- fit_17_19_bullet_prev$summary() |> 
-  filter(str_starts(variable, "beta\\[")) |> 
-  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
-         id = stringr::str_extract(variable, pattern = "\\d+]"),
-         id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) |> 
-  select(param, id, mean) |> 
-  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
-  left_join(player_id, by = "id") |> 
-  filter(player_name %in% perm_players)
-
-levels <- true_beta |> 
-  filter(param == 2) |> 
-  arrange(mean) |> 
-  pull(player_name)
-  
-
-true_vals <- true_beta |> 
-  filter(param == 2) |>  
-  mutate(y = factor(player_name, levels = levels)) |> 
-  arrange(y) |> 
-  mutate(y_fake = row_number() - 0.5,
-         yend = row_number() + 0.5)
-  
-perm_17_19_winner <- player_pars |> 
-  filter(param == 2) |>
-  mutate(y = factor(player_name, levels = levels)) |> 
-  ggplot(aes(x = mean, y = y)) +
-  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
-  geom_segment(data = true_vals, 
-               aes(x = mean, y = y_fake, yend = yend), col = "red") +
-  labs(y = "", x = "Estimated W/L-Effect") +
-  theme_single_y()
-
-ggsave(plot = perm_17_19_winner, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "perm_17_19_winner.png")), dpi = 600,
-       height = 5, width = 7)
-
-```
-
-
-## GMs
-
-### Permuting for GM Data
-
-```{r figure 8 right}
-perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
-
-## read all the files in this directory
-perm_files <- list.files(perm_data_path)
-
-perm_gm <- perm_files[1:1000] |> 
-  map_dfr(~read_rds(here(perm_data_path, .x)))
-
-sim_pars <- perm_gm |> 
-  select(variable, mean, sim_id) 
-
-## then need to overlay the true values also
-true_values <- fit_gm_bullet_prev$summary() |> 
-  dplyr::filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |> 
-  select(variable, mean)
-
-perm_gm_global <- sim_pars |> 
-  dplyr::filter(variable %in% c("mu_beta",  "gamma1", "gamma2")) |> 
-  ggplot(aes(mean)) +
-  geom_histogram() +
-  facet_wrap(~variable, scales = "free") +
-  geom_vline(data = true_values, mapping = aes(xintercept = mean),
-             col = "red") +
-  theme_3col() +
-  labs(x = element_blank(), y = element_blank())
-
-ggsave(plot = perm_gm_global, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "perm_gm_global.png")), dpi = 600,
-       height = 5, width = 7)
-
-## then repeat for the winner effects
-player_id <- as_tibble(bullet_gm) |> 
-  mutate(id = row_number()) |> 
-  rename(player_name = value)
-
-player_pars <- sim_pars |> 
-  as_draws_df() |> 
-  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
-         id = stringr::str_extract(variable, pattern = "\\d+]"),
-         id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) |> 
-  drop_na() |> 
-  select(param, id, mean, sim_id) |> 
-  mutate(id = as.numeric(id)) |> 
-  left_join(player_id, by = "id")
-
-perm_players <- unique(player_pars$player_name)
-
-true_beta <- fit_gm_bullet_prev$summary() |> 
-  filter(str_starts(variable, "beta\\[")) |> 
-  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
-         id = stringr::str_extract(variable, pattern = "\\d+]"),
-         id = stringr::str_replace(id, "\\]", ""),
-         player_id = paste0("beta[", id, "]")) |> 
-  select(param, id, mean) |> 
-  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
-  left_join(player_id, by = "id") |> 
-  filter(player_name %in% perm_players)
-
-levels <- true_beta |> 
-  filter(param == 2) |> 
-  arrange(mean) |> 
-  pull(player_name)
-
-true_vals <- true_beta |> 
-  filter(param == 2) |>  
-  mutate(y = factor(player_name, levels = levels)) |> 
-  arrange(y) |> 
-  mutate(y_fake = row_number() - 0.25,
-         yend = row_number() + 0.25)
-
-perm_gm_winner <- player_pars |> 
-  filter(param == 2) |>
-  mutate(y = factor(player_name, levels = levels)) |> 
-  ggplot(aes(x = mean, y = y)) +
-  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
-  geom_segment(data = true_vals,
-               aes(x = mean, y = y_fake, yend = yend), col = "red") +
-  theme_single_y() +
-  labs(x = "Estimated W/L-Effect", y = "")
-
-perm_gm_winner
-
-ggsave(plot = perm_gm_winner, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "perm_gm_winner.png")), dpi = 600,
-       height = 5, width = 7)
-
-levels <- true_beta |> 
-  filter(param == 1) |> 
-  arrange(mean) |> 
-  pull(player_name)
-
-true_vals <- true_beta |> 
-  filter(param == 1) |>  
-  mutate(y = factor(player_name, levels = levels)) |> 
-  arrange(y) |> 
-  mutate(y_fake = row_number() - 0.5,
-         yend = row_number() + 0.5)
-
-perm_gm_player <- player_pars |> 
-  filter(param == 1) |>
-  mutate(y = factor(player_name, levels = levels)) |> 
-  ggplot(aes(x = mean, y = y)) +
-  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
-  geom_segment(data = true_vals, 
-               aes(x = mean, y = y_fake, yend = yend), col = "red") +
-  theme_single_y() +
-  labs(x = "Estimated Player Effect", y = "")
-
-
-perm_gm_player
-
-ggsave(plot = perm_gm_player, 
-       filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "perm_gm_player.png")), dpi = 600,
-       height = 5, width = 7)
-
 ```
 
 
@@ -1848,6 +1603,254 @@ ggsave(plot = hist_comp_global,
        height = 3.5, width = 7)
 
 ```
+
+
+
+### Permuting for 1700-1900
+
+```{r perm for 17-19}
+#| eval: false
+perm_data_path <- here("results/lichess1700-1900_2025/perm")
+
+path_id <- 1
+data_path <- res_data_path[path_id]
+(perm_files <- list.files(perm_data_path))
+
+perm_17_19 <- perm_files[1:1000] |>
+  map_dfr(~ read_rds(here(perm_data_path, .x)))
+
+sim_pars <- perm_17_19 |>
+  select(variable, mean, sim_id)
+
+data_path <- here("results/lichess1700-1900_2025")
+
+fit_17_19_bullet_prev <- readRDS(file = 
+                                   paste0(data_path,
+                                          "/all_rated_bullet_model_prev_n1.RDS"))
+
+
+bullet_17_19 <- readRDS(file = paste0(
+  data_path,
+  "/users_bullet.RDS"
+))
+
+## then need to overlay the true values also
+true_values <- fit_17_19_bullet_prev$summary() |>
+  filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |>
+  select(variable, mean)
+
+perm_17_19_global <- sim_pars |>
+  filter(variable %in% c(
+    "mu_beta", "gamma1", "gamma2")) |>
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  facet_wrap(~variable, scales = "free") +
+  geom_vline(
+    data = true_values,
+    mapping = aes(xintercept = mean),
+    col = "red"
+  ) +
+  theme_3col() +
+  scale_x_continuous(breaks = breaks_pretty(n = 3)) +
+  labs(x = element_blank(), y = element_blank())
+
+perm_17_19_global
+
+ggsave(
+  plot = perm_17_19_global,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "perm_17_19_global.png"
+  )), dpi = 600,
+  height = 5, width = 7
+)
+```
+
+
+```{r figure 8 left - perm winner effects}
+
+player_pars <- sim_pars |> 
+  as_draws_df() |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  drop_na() |> 
+  select(param, id, mean, sim_id) |> 
+  mutate(id = as.numeric(id)) |> 
+  left_join(player_id, by = "id")
+
+perm_players <- unique(player_pars$player_name)
+
+true_beta <- fit_17_19_bullet_prev$summary() |> 
+  filter(str_starts(variable, "beta\\[")) |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  select(param, id, mean) |> 
+  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  filter(player_name %in% perm_players)
+
+levels <- true_beta |> 
+  filter(param == 2) |> 
+  arrange(mean) |> 
+  pull(player_name)
+  
+
+true_vals <- true_beta |> 
+  filter(param == 2) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
+  
+perm_17_19_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  labs(y = "", x = "Estimated W/L-Effect") +
+  theme_single_y()
+
+ggsave(plot = perm_17_19_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_17_19_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+```
+
+
+## GMs
+
+### Permuting for GM Data
+
+```{r figure 8 right}
+perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
+
+## read all the files in this directory
+perm_files <- list.files(perm_data_path)
+
+perm_gm <- perm_files[1:1000] |> 
+  map_dfr(~read_rds(here(perm_data_path, .x)))
+
+sim_pars <- perm_gm |> 
+  select(variable, mean, sim_id) 
+
+## then need to overlay the true values also
+true_values <- fit_gm_bullet_prev$summary() |> 
+  dplyr::filter(variable %in% c("mu_beta", "gamma1", "gamma2")) |> 
+  select(variable, mean)
+
+perm_gm_global <- sim_pars |> 
+  dplyr::filter(variable %in% c("mu_beta",  "gamma1", "gamma2")) |> 
+  ggplot(aes(mean)) +
+  geom_histogram() +
+  facet_wrap(~variable, scales = "free") +
+  geom_vline(data = true_values, mapping = aes(xintercept = mean),
+             col = "red") +
+  theme_3col() +
+  labs(x = element_blank(), y = element_blank())
+
+ggsave(plot = perm_gm_global, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_global.png")), dpi = 600,
+       height = 5, width = 7)
+
+## then repeat for the winner effects
+player_id <- as_tibble(bullet_gm) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
+
+player_pars <- sim_pars |> 
+  as_draws_df() |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  drop_na() |> 
+  select(param, id, mean, sim_id) |> 
+  mutate(id = as.numeric(id)) |> 
+  left_join(player_id, by = "id")
+
+perm_players <- unique(player_pars$player_name)
+
+true_beta <- fit_gm_bullet_prev$summary() |> 
+  filter(str_starts(variable, "beta\\[")) |> 
+  mutate(param = stringr::str_extract(variable, pattern = "\\d"),
+         id = stringr::str_extract(variable, pattern = "\\d+]"),
+         id = stringr::str_replace(id, "\\]", ""),
+         player_id = paste0("beta[", id, "]")) |> 
+  select(param, id, mean) |> 
+  mutate(id = as.numeric(id), param = as.numeric(param)) |> 
+  left_join(player_id, by = "id") |> 
+  filter(player_name %in% perm_players)
+
+levels <- true_beta |> 
+  filter(param == 2) |> 
+  arrange(mean) |> 
+  pull(player_name)
+
+true_vals <- true_beta |> 
+  filter(param == 2) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.25,
+         yend = row_number() + 0.25)
+
+perm_gm_winner <- player_pars |> 
+  filter(param == 2) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals,
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  theme_single_y() +
+  labs(x = "Estimated W/L-Effect", y = "")
+
+perm_gm_winner
+
+ggsave(plot = perm_gm_winner, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_winner.png")), dpi = 600,
+       height = 5, width = 7)
+
+levels <- true_beta |> 
+  filter(param == 1) |> 
+  arrange(mean) |> 
+  pull(player_name)
+
+true_vals <- true_beta |> 
+  filter(param == 1) |>  
+  mutate(y = factor(player_name, levels = levels)) |> 
+  arrange(y) |> 
+  mutate(y_fake = row_number() - 0.5,
+         yend = row_number() + 0.5)
+
+perm_gm_player <- player_pars |> 
+  filter(param == 1) |>
+  mutate(y = factor(player_name, levels = levels)) |> 
+  ggplot(aes(x = mean, y = y)) +
+  stat_histinterval(slab_fill = NA, .width = c(0.5, 0.95)) +
+  geom_segment(data = true_vals, 
+               aes(x = mean, y = y_fake, yend = yend), col = "red") +
+  theme_single_y() +
+  labs(x = "Estimated Player Effect", y = "")
+
+
+perm_gm_player
+
+ggsave(plot = perm_gm_player, 
+       filename = paste0(here("Paper_WriteUp", "paper_figures",
+                              "perm_gm_player.png")), dpi = 600,
+       height = 5, width = 7)
+
+```
+
+
 
 
 ### OTHER 
