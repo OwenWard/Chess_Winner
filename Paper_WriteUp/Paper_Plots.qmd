@@ -892,9 +892,9 @@ bul_blit_gm_comp_global <- bind_rows(bullet_pars, blitz_pars) |>
   theme_3col() +
   theme(legend.position = "bottom") +
   facetted_pos_scales(x = list( #for customizing scales on each facet
-    name == "mu_beta" ~ scale_x_continuous(breaks = c(0, 0.5), limits = c(0, 0.6)),
+    name == "mu_beta" ~ scale_x_continuous(breaks = breaks_pretty(n = 2)),
     name == "gamma1" ~ scale_x_continuous(breaks = breaks_pretty(n = 2)),
-    name == "gamma2" ~ scale_x_continuous(breaks = breaks_pretty(n = 2), limits = c(0.005, 0.0057))
+    name == "gamma2" ~ scale_x_continuous(breaks = breaks_pretty(n = 2))
   )) +
   #scale_x_continuous(breaks = breaks_pretty(n = 2)) +
   scale_color_viridis_d(option = "H")
