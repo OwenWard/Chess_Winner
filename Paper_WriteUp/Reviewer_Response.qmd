@@ -60,7 +60,7 @@ res_data_path[4] <- here("results_2025/lichessGrandmasters/")
 
 
 
-#plotting RDs and volatilities - Associate Editor, Comment 5
+#Associate Editor, Comment 5 - plotting RDs and volatilities
 ```{r}
 #import data
 data_path = paste0(all_data_path[4])
@@ -149,7 +149,7 @@ ggsave(plot = vol_plot,
 
 
 
-#distribution of x_{ij} - Reviewer 2, Comment 6
+#Reviewer 2, Comment 6 - distribution of x_{ij}
 ```{r}
 #import data
 data_path = paste0(all_data_path[1], "/")
