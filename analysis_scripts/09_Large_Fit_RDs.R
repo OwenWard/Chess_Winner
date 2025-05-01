@@ -98,10 +98,24 @@ init_data <- tidy_games |>
 #get RDs
 plan(multisession, workers = 8) #in parallel - dramatically speeds it up
 start = Sys.time()
-init_RDs = future_map_dfr(users, get_RDs, init_data) |>
-  as_tibble()
+init_RDs = future_map_dfr(users, get_RDs, init_data) |> #get RDs
+  as_tibble() 
 end = Sys.time()
 end - start 
+
+#add updated rating diff covariate
+
+g_RD = function(s) { #function for RD calculation
+  q_constant = log(10)/400 #constant for formula
+  1/sqrt((1+3*q_constant^2*s^2)/pi^2)
+}
+mean_RD = mean(init_RDs$RD) #the avg RD across all games for all focal players
+#use this to fill in opponents RD
+
+init_RDs = init_RDs |>
+  mutate(opp_RD = mean_RD,
+         new_rating_diff = elo_diff*g_RD(sqrt(RD^2 + opp_RD^2)))
+
 
 
 ### then fit the models
@@ -111,7 +125,7 @@ stan_data_ave <- list(N = nrow(init_RDs),
                       y = init_RDs$focal_result,
                       id = init_RDs$focal_id,
                       colour = init_RDs$focal_white,
-                      elo = init_RDs$elo_diff,
+                      elo = init_RDs$new_rating_diff,
                       win_prop = init_RDs$ave_prop)
 
 
