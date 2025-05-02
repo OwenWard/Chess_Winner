@@ -110,9 +110,6 @@ cat("----------\n")
 
 ### then fit the models
 
-## check only
-hist_data_init <- hist_data_init[1:5000, ]
-
 stan_data_ave <- list(N = nrow(hist_data_init),
                       J = length(users),
                       y = hist_data_init$focal_result,
