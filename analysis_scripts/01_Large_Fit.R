@@ -96,7 +96,7 @@ init_data <- tidy_games |>
          focal_win_prop, elo_diff, focal_result) |>
   group_by(focal_id) |>
   mutate(ave_prop = lag(focal_win_prop, n = 1, default = 0) - 
-           lag(cummean(focal_result), default = 0))
+           lag(cummean(focal_result), default = 0)) |> 
   filter(focal_result != 0.5)
 
 cat("----------\n")
