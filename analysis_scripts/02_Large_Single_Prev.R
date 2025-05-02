@@ -131,7 +131,7 @@ fit3_ave <- mod$sample(data = stan_data_ave,
                        seed = 123,
                        chains = 4,
                        parallel_chains = 4,
-                       refresh = 100,iter_warmup = 100, iter_sampling = 100)
+                       refresh = 100)
 
 ## save the stan fit as not actually that large here
 
