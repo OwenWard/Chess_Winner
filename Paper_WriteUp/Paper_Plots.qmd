@@ -1497,14 +1497,16 @@ To be added here for 1700-1900 and GM cohorts.
 
 
 ```{r figure S3 left}
-## global effects first
-data_path <- here("results_2025/lichess1700-1900")
+model_path = here("results_revision", "lichess1700-1900")
 
-fit_17_19_bullet_5 <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n5.RDS"))
+#GM n = 1 model
+fit_17_19_bullet_prev = readRDS(file = here(model_path, "all_rated_bullet_model_n1.RDS"))
 
-fit_17_19_bullet_10 <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+#GM n = 5 model
+fit_17_19_bullet_5 = readRDS(file = here(model_path, "all_rated_bullet_model_n5.RDS"))
+
+#GM n = 10 model
+fit_17_19_bullet_10 = readRDS(file = here(model_path, "all_rated_bullet_model_n10.RDS"))
 
 prev_pars <- fit_17_19_bullet_prev$draws(c("mu_beta",
                                         "gamma1", "gamma2")) |> 
@@ -1533,7 +1535,7 @@ hist_comp_global <- bind_rows(prev_pars, pre_5_pars, pre_10_pars) |>
   labs(x = element_blank(), y = element_blank(), color = element_blank()) +
   theme_3col() +
   theme(legend.position = "bottom") +
-  scale_x_continuous(breaks = breaks_pretty(n = 2)) +
+  scale_x_continuous(n.breaks = 3) +
   scale_color_viridis_d(option = "H")
 
 ggsave(plot = hist_comp_global, 
@@ -1545,14 +1547,16 @@ ggsave(plot = hist_comp_global,
 
 
 ```{r figure S3 right}
-## global effects first
-data_path <- here("results_2025/lichessGrandmasters")
+model_path = here("results_revision", "lichessGrandmasters")
 
-fit_gm_bullet_5 <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n5.RDS"))
+#GM n = 1 model
+fit_gm_bullet_prev = readRDS(file = here(model_path, "all_rated_bullet_model_n1.RDS"))
 
-fit_gm_bullet_10 <- 
-  readRDS(file =paste0(data_path,"/all_rated_bullet_model_n10.RDS"))
+#GM n = 5 model
+fit_gm_bullet_5 = readRDS(file = here(model_path, "all_rated_bullet_model_n5.RDS"))
+
+#GM n = 10 model
+fit_gm_bullet_10 = readRDS(file = here(model_path, "all_rated_bullet_model_n10.RDS"))
 
 prev_pars <- fit_gm_bullet_prev$draws(c("mu_beta",
                                         "gamma1", "gamma2")) |> 
