@@ -512,7 +512,7 @@ fig2a <- log_time_diff_plot_gm + theme_single_y()
 
 ggsave(plot = fig2a, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "time_between_games_gm.png")), dpi = 600,
+                              "fig2a.png")), dpi = 600,
        height = 4, width = 6.25)
 
 
@@ -530,7 +530,7 @@ fig2b <- session_length_plot_gm + theme_single_y()
 
 ggsave(plot = fig2b, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
-                              "session_length_gm.png")), dpi = 600,
+                              "fig2b.png")), dpi = 600,
        height = 4, width = 6.25)
 ```
 
