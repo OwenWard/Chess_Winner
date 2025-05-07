@@ -450,7 +450,8 @@ lichess_data_gm = files_gm %>%
 
 bullet_data_gm = lichess_data_gm |> 
   mutate(Event = tolower(Event)) |>
-  filter(TimeControl == "60+0", Variant == "Standard", Event == "rated bullet game")
+  filter(TimeControl == "60+0", Variant == "Standard", Event == "rated bullet game") %>%
+  distinct()
 
 gm_session_lengths <- list()
 gm_time_diffs <- list()
@@ -464,11 +465,6 @@ for (i in 1:length(gm_players)) {
     mutate(UTCDateTime = ymd_hms(paste(UTCDate, UTCTime))) |> # convert date-time to lubridate type
     arrange(UTCDateTime) |> # order date-time
     mutate(time_diff = UTCDateTime - lag(UTCDateTime)) # time difference between games
-  
-  ## A check to remove duplicated games, if they occur
-  # cat("Dupes:", sum(duplicated(tidy_games_gms[1:9])), "\n", sep = " ")
-  # # some players have all their games double recorded for some reason
-  # tidy_games_gms <- tidy_games_gms[!duplicated(tidy_games_gms[1:9]), ] # remove duplicate rows
 
   # store time diffs between games
   gm_time_diffs[[gm_players[i]]] <- difftime(tidy_games_gms$UTCDateTime,
