@@ -718,21 +718,6 @@ player_pars <- fit_gm_bullet_prev$draws() |>
          param = as.numeric(param)) |> 
   left_join(player_id, by = "id")
 
-## see what the smallest and largest posterior mean is 
-## for the winner effects
-player_pars |> 
-  group_by(player_name, param) |> 
-  summarise(post_mean = mean(value)) |> 
-  filter(param == 2) |> 
-  ungroup() |> 
-  slice_max(order_by = post_mean, n = 5)
-
-player_pars |> 
-  group_by(player_name, param) |> 
-  summarise(post_mean = mean(value)) |> 
-  filter(param == 2) |> 
-  ungroup() |> 
-  slice_min(order_by = post_mean, n = 5)
 
 ## then the winner effects plot
 winner_plot_gm <- player_pars |> 
