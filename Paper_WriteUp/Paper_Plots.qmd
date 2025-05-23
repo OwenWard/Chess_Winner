@@ -671,7 +671,9 @@ winner_plot_17_19 <- player_pars |>
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "1700-1900 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.075, 0.075)) +
+  scale_x_continuous(breaks = c(-0.06, -0.03, 0, 0.03, 0.06), 
+                     labels = c(-0.06, -0.03, 0, 0.03, 0.06),
+                     limits = c(-0.062, 0.062)) +
   theme_single_y()
 
 ggsave(plot = winner_plot_17_19, 
@@ -728,7 +730,9 @@ winner_plot_gm <- player_pars |>
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "GM Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
-  xlim(c(-0.075, 0.075)) +
+  scale_x_continuous(breaks = c(-0.06, -0.03, 0, 0.03, 0.06), 
+                     labels = c(-0.06, -0.03, 0, 0.03, 0.06),
+                     limits = c(-0.062, 0.062)) +
   theme_single_y()
 
 
@@ -1418,6 +1422,9 @@ winner_plot_20_22 <- player_pars |>
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "2000-2200 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  scale_x_continuous(breaks = c(-0.06, -0.03, 0, 0.03, 0.06), 
+                     labels = c(-0.06, -0.03, 0, 0.03, 0.06),
+                     limits = c(-0.062, 0.062)) +
   theme_single_y()
 
 #save
@@ -1432,10 +1439,10 @@ ggsave(plot = winner_plot_20_22,
 ```{r figure-s1-right}
 #| eval: false
 #read in model
-fit_20_22_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
+fit_23_25_bullet_prev = readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
 
 #read in users
-bullet_20_22 = readRDS(here("results_revision", "lichess2300-2500", "users_bullet.RDS"))
+bullet_23_25 = readRDS(here("results_revision", "lichess2300-2500", "users_bullet.RDS"))
 
 player_id <- as_tibble(bullet_23_25) |> 
   mutate(id = row_number()) |> 
@@ -1462,6 +1469,9 @@ winner_plot_23_25 <- player_pars |>
   labs(x = "Change in Win Probability", y = element_blank(), 
        title = "2300-2500 Cohort") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
+  scale_x_continuous(breaks = c(-0.06, -0.03, 0, 0.03, 0.06), 
+                     labels = c(-0.06, -0.03, 0, 0.03, 0.06),
+                     limits = c(-0.062, 0.062)) +
   theme_single_y()
 
 #save
