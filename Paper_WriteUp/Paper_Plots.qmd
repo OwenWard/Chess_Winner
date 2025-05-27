@@ -592,6 +592,7 @@ facet_labels = as_labeller(c(
 ), label_parsed)
 
 comp_global = bind_rows(pars_17_19, pars_20_22, pars_23_25, pars_gm) |> 
+  mutate(name = factor(name, levels = c("mu_beta", "gamma1", "gamma2"))) |>
   ggplot(aes(x = value, y = name, color = factor(model, levels = c("1700-1900", "2000-2200", "2300-2500", "GM")))) +
   stat_pointinterval(position = position_dodge(width = 0.3)) +
   facet_wrap(~name,
