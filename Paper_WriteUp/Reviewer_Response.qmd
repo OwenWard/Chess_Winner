@@ -158,6 +158,8 @@ files <- list.files(data_path)
 lichess_data <- files |> 
   map_dfr(~read_player(data_path, .x))
 
+time_control <- "bullet"
+
 small_data <- lichess_data |>
   mutate(Event = tolower(Event)) |>
   filter(Event == paste0("rated ", time_control, " game"),
@@ -172,7 +174,7 @@ users <- small_data |>
   filter(n >= 10) |>
   pull(Username)
 
-tidy_games <- map_dfr(users, get_hist, small_data, prev_n = n) |> 
+tidy_games <- map_dfr(users, get_hist, small_data, prev_n = 1) |> 
   as_tibble() 
 
 init_data <- tidy_games |>
