@@ -1,0 +1,120 @@
+---
+title: "Revision Analyses"
+author: Owen G. Ward
+date: today
+format: 
+  # html:
+  #   toc: true
+  #   toc-location: left
+  pdf
+---
+
+This document will contain any analyses created in support of the paper revision.
+
+```{r setup}
+#| include: false
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.width = 7, dev = "png", fig.path = "output/",
+                      fig.height = 5, dpi = 600)
+
+library(tidyverse)
+library(RcppRoll)
+library(cmdstanr)
+library(posterior)
+library(bayesplot)
+library(loo)
+library(scales)
+library(ggridges)
+library(here)
+library(ggdist)
+library(viridis)
+library(PlayerRatings)
+library(ggrepel)
+library(ggpubr)
+options(mc.cores = parallel::detectCores())
+theme_set(theme_bw())
+
+
+## to load some plot defaults
+source(here("utils", "helper.R"))
+source(here("utils", "plot_templates.R"))
+
+all_data_path <- rep(NA, 4)
+all_data_path[1] <- here("box_data/lichess1700-1900/")
+all_data_path[2] <- here("box_data/lichess2000-2200/")
+all_data_path[3] <- here("box_data/lichess2300-2500/")
+all_data_path[4] <- here("box_data/lichessGrandmasters/")
+res_data_path <- rep(NA, 4)
+res_data_path[1] <- here("results_2025/lichess1700-1900/")
+res_data_path[2] <- here("results_2025/lichess2000-2200/")
+res_data_path[3] <- here("results_2025/lichess2300-2500/")
+res_data_path[4] <- here("results_2025/lichessGrandmasters/")
+
+```
+
+
+
+## Investigate how often bullet follows blitz
+
+```{r}
+path_id <- 1  ## for 1700-1900 
+data_path <- all_data_path[path_id]
+files <- list.files(data_path)
+lichess_data <- files |> 
+  map_dfr(~read_player(data_path, .x))
+
+## overall summary of all event types
+lichess_data |> 
+  group_by(Event) |> 
+  count() |> 
+  arrange(-n)
+
+## what proportion of bullet games are of what time format
+lichess_data |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated bullet game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+## repeat for blitz games instead
+lichess_data |> 
+  mutate(Event = tolower(Event)) |> 
+  filter(grepl("rated blitz game", Event)) |> 
+  group_by(TimeControl) |> 
+  count() |> 
+  arrange(-n) |> 
+  ungroup() |> 
+  mutate(prop = n/sum(n))
+
+
+bul_blitz_data <- lichess_data |> 
+  mutate(Event = tolower(Event)) |>
+  filter(TimeControl == "60+0" | TimeControl == "180+0") |>
+  filter(Variant == "Standard")  |> 
+  filter(str_detect(Event, "rated blitz game|rated bullet game")) |> 
+  mutate(
+    game_type = case_when(
+      str_detect(Event, "blitz") ~ "blitz",
+      str_detect(Event, "bullet") ~ "bullet"
+    )
+  )
+
+table(bul_blitz_data$game_type)
+
+bul_blitz_data |> 
+  mutate(next_game_type = lead(game_type)) |> 
+  relocate(game_type, next_game_type) |> 
+  filter(game_type == "blitz") |> 
+  count(next_game_type) |> 
+  mutate(prop = n/sum(n))
+
+
+
+
+
+```
+
