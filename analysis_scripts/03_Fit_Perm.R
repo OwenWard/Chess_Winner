@@ -31,11 +31,8 @@ all_data_path[1] <- here("box_data/lichess1700-1900/")
 all_data_path[2] <- here("box_data/lichess2000-2200/")
 all_data_path[3] <- here("box_data/lichess2300-2500/")
 all_data_path[4] <- here("box_data/lichessGrandmasters/")
+
 all_save_path[1] <- here("results_revision/lichess1700-1900/")
-
-# all_save_path[1] <- here("results/Full_Fits/lichess1700-1900/")
-# ## if need to run it locally
-
 all_save_path[2] <- here("results_revision/lichess2000-2200/")
 all_save_path[3] <- here("results_revision/lichess2300-2500/")
 all_save_path[4] <- here("results_revision/lichessGrandmasters/")
@@ -73,18 +70,15 @@ select_users <- small_data |>
 
 
 ## just going to use the last games for this
-## permute within a player
-
 last_games <- small_data |> 
   filter(Username %in% select_users) |> 
   group_by(Username) |> 
   arrange(UTCDate, UTCTime, .by_group = TRUE) |> 
-  slice_tail(n = 1000) |> 
-  ungroup() |> 
-  group_by(Username) |> 
-  mutate(Result = sample(Result)) |> 
-  ungroup()
+  slice_tail(n = 1000)
 
+## permute
+last_games = last_games[sample(nrow(last_games), size = nrow(last_games), replace = FALSE),] %>% 
+  arrange(Username)
 
 users <- select_users
 
