@@ -580,16 +580,16 @@ fig2b <- session_length_plot_gm + theme_single_y()
 
 ```{r figure 3}
 # read in models
-fit_17_19_bullet_prev <- readRDS(here("results_revision", "lichess1700-1900", "all_rated_bullet_model_n1.RDS"))
-fit_20_22_bullet_prev <- readRDS(here("results_revision", "lichess2000-2200", "all_rated_bullet_model_n1.RDS"))
-fit_23_25_bullet_prev <- readRDS(here("results_revision", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
-fit_gm_bullet_prev <- readRDS(here("results_revision", "lichessGrandmasters", "all_rated_bullet_model_n1.RDS"))
+fit_17_19_bullet_prev <- readRDS(here("results_revision_may", "lichess1700-1900", "all_rated_bullet_model_n1.RDS"))
+fit_20_22_bullet_prev <- readRDS(here("results_revision_may", "lichess2000-2200", "all_rated_bullet_model_n1.RDS"))
+fit_23_25_bullet_prev <- readRDS(here("results_revision_may", "lichess2300-2500", "all_rated_bullet_model_n1.RDS"))
+fit_gm_bullet_prev <- readRDS(here("results_revision_may", "lichessGrandmasters", "all_rated_bullet_model_n1.RDS"))
 
 # read in users
-bullet_17_19 <- readRDS(here("results_revision", "lichess1700-1900", "users_bullet.RDS"))
-bullet_20_22 <- readRDS(here("results_revision", "lichess2000-2200", "users_bullet.RDS"))
-bullet_23_25 <- readRDS(here("results_revision", "lichess2300-2500", "users_bullet.RDS"))
-bullet_gm <- readRDS(here("results_revision", "lichessGrandmasters", "users_bullet.RDS"))
+bullet_17_19 <- readRDS(here("results_revision_may", "lichess1700-1900", "users_bullet.RDS"))
+bullet_20_22 <- readRDS(here("results_revision_may", "lichess2000-2200", "users_bullet.RDS"))
+bullet_23_25 <- readRDS(here("results_revision_may", "lichess2300-2500", "users_bullet.RDS"))
+bullet_gm <- readRDS(here("results_revision_may", "lichessGrandmasters", "users_bullet.RDS"))
 
 
 # get global effects of each
@@ -747,14 +747,14 @@ indiv_plot_17_19 <- player_pars |>
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
 
-# ggsave(
-#   plot = indiv_plot_17_19,
-#   filename = paste0(here(
-#     "Paper_WriteUp", "paper_figures",
-#     "Figure_S4_left.png"
-#   )), dpi = 600,
-#   height = 7, width = 7
-# )
+ggsave(
+  plot = indiv_plot_17_19,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "Figure_S6_left.png"
+  )), dpi = 600,
+  height = 7, width = 7
+)
 ```
 
 
@@ -797,14 +797,14 @@ winner_plot_gm <- player_pars |>
   theme_single_y()
 
 
-# ggsave(
-#   plot = winner_plot_gm,
-#   filename = paste0(here(
-#     "Paper_WriteUp", "paper_figures",
-#     "fig4_right.png"
-#   )), dpi = 600,
-#   height = 7, width = 7
-# )
+ggsave(
+  plot = winner_plot_gm,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "Figure_S6_right.png"
+  )), dpi = 600,
+  height = 7, width = 7
+)
 ```
 
 
@@ -822,14 +822,14 @@ indiv_plot_gm <- player_pars |>
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y()
 
-# ggsave(
-#   plot = indiv_plot_gm,
-#   filename = paste0(here(
-#     "Paper_WriteUp", "paper_figures",
-#     "Figure_S4_right.png"
-#   )), dpi = 600,
-#   height = 7, width = 7
-# )
+ggsave(
+  plot = indiv_plot_gm,
+  filename = paste0(here(
+    "Paper_WriteUp", "paper_figures",
+    "Figure_S6_right.png"
+  )), dpi = 600,
+  height = 7, width = 7
+)
 ```
 
 
