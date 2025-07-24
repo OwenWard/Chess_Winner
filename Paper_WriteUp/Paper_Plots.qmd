@@ -1264,7 +1264,7 @@ med_effect_plot = beta_draws %>% filter(dataset_id %in% 4:6) %>%
   labs(x = "Estimated Experiential Effect", y = "Simulated Player ID", colour = "Number of Games\nPlayed per Player") +
   geom_vline(aes(xintercept = 0), col = "red", linetype = "dashed") +
   theme_single_y_legend() +
-  scale_color_viridis_d(option = "D")
+  scale_color_viridis_d(option = "D", begin = 0, end = 0.75)
 
 #save
 # ggsave(plot = med_effect_plot,
@@ -1342,7 +1342,7 @@ mu_beta_plot = mu_beta_draws %>% ggplot(aes(x = draw, y = true_mu_beta)) +
                      labels = c(0, as.character(signif(true_mu_betas, 3)))) +
   scale_y_continuous(breaks = c(0, signif(true_mu_betas, 3)), 
                      labels = c(0, as.character(signif(true_mu_betas, 3)))) +
-  scale_color_viridis_d(option = "D")
+  scale_color_viridis_d(option = "D", begin = 0, end = 0.75)
 mu_beta_plot
 
 #save
