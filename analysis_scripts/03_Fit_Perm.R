@@ -76,11 +76,6 @@ last_games <- small_data |>
   slice_tail(n = 1000)
 users = select_users
 
-## permute
-last_games = last_games[sample(nrow(last_games), size = nrow(last_games), replace = FALSE),] %>% 
-  arrange(Username)
-
-
 tidy_games <- map_dfr(users, get_hist, last_games, prev_n = 1) |> 
   as_tibble()
 
