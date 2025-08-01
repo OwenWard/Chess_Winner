@@ -96,18 +96,20 @@ init_data <- tidy_games |>
   dplyr::select(focal_user, focal_id, focal_white, 
                 focal_win_prop, elo_diff, focal_result,
                 UTCDateTime) |>
+  group_by(focal_id) %>%
+  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA)) %>% #default is to ensure first game is always start of a new session
+  ungroup() %>%
+  mutate(in_session = !((!time_diff %in% 1:300) | is.na(time_diff)), #getting session id for permuting
+         session_number = cumsum(!in_session)) %>%
+  group_by(session_number) %>% #now permute within the sessions
+  slice_sample(prop = 1) %>% #permute
+  ungroup() %>%
   group_by(focal_id) |>
-  mutate(time_diff = UTCDateTime - lag(UTCDateTime, default = NA), #default is to ensure first game is always start of a new session
-         cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
+  mutate(cum_win_prob = cummean(focal_result), #the mean win probability for the focal player up to the ith (current) game 
          ave_prop = ifelse(!(time_diff %in% 1:300) | is.na(time_diff),  
                            0, #if games played in different session, history is NULL (0)
                            lag(focal_win_prop) - cum_win_prob)) |> #if game played in same session, rolling mean over the past min(n, num games in curr session) games
   filter(focal_result != 0.5) %>%
-  ungroup() %>%
-  mutate(in_session = !((!time_diff %in% 1:300) | is.na(time_diff)), #getting session id
-         session_number = cumsum(!in_session)) %>%
-  group_by(session_number) %>% #now permute within the sessions
-  slice_sample() %>% #permute
   ungroup() %>%
   arrange(focal_user, session_number)
 
