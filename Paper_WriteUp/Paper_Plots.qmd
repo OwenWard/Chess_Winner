@@ -1593,7 +1593,7 @@ ggsave(plot = hist_comp_global,
 
 ```{r perm for 17-19}
 #| eval: false
-perm_data_path <- here("results/lichess1700-1900_2025/perm")
+perm_data_path <- here("results_revision/lichess1700-1900/perm")
 
 path_id <- 1
 data_path <- res_data_path[path_id]
@@ -1605,17 +1605,10 @@ perm_17_19 <- perm_files[1:1000] |>
 sim_pars <- perm_17_19 |>
   select(variable, mean, sim_id)
 
-data_path <- here("results/lichess1700-1900_2025")
+data_path <- here("results_revision/lichess1700-1900")
 
-fit_17_19_bullet_prev <- readRDS(file = 
-                                   paste0(data_path,
-                                          "/all_rated_bullet_model_prev_n1.RDS"))
-
-
-bullet_17_19 <- readRDS(file = paste0(
-  data_path,
-  "/users_bullet.RDS"
-))
+fit_17_19_bullet_prev <- readRDS(file = paste0(data_path, "/all_rated_bullet_model_n1.RDS"))
+bullet_17_19 <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
 
 ## then need to overlay the true values also
 true_values <- fit_17_19_bullet_prev$summary() |>
@@ -1651,6 +1644,9 @@ ggsave(
 
 
 ```{r figure 8 left - perm winner effects}
+player_id <- as_tibble(bullet_17_19) |> 
+  mutate(id = row_number()) |> 
+  rename(player_name = value)
 
 player_pars <- sim_pars |> 
   as_draws_df() |> 
@@ -1712,7 +1708,8 @@ ggsave(plot = perm_17_19_winner,
 ### Permuting for GM Data
 
 ```{r figure 8 right}
-perm_data_path <- here("results/lichessGrandmasters_2025/perm/")
+data_path <- here("results_revision/lichessGrandmasters/")
+perm_data_path <- here("results_revision/lichessGrandmasters/perm/")
 
 ## read all the files in this directory
 perm_files <- list.files(perm_data_path)
@@ -1722,6 +1719,10 @@ perm_gm <- perm_files[1:1000] |>
 
 sim_pars <- perm_gm |> 
   select(variable, mean, sim_id) 
+
+
+fit_gm_bullet_prev <- readRDS(file = paste0(data_path, "/all_rated_bullet_model_n1.RDS"))
+bullet_gm <- readRDS(file = paste0(data_path, "/users_bullet.RDS"))
 
 ## then need to overlay the true values also
 true_values <- fit_gm_bullet_prev$summary() |> 
