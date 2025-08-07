@@ -1682,8 +1682,8 @@ true_vals <- true_beta |>
   filter(param == 2) |>  
   mutate(y = factor(player_name, levels = levels)) |> 
   arrange(y) |> 
-  mutate(y_fake = row_number() - 0.5,
-         yend = row_number() + 0.5)
+  mutate(y_fake = row_number() - 0.4,
+         yend = row_number() + 0.4)
   
 perm_17_19_winner <- player_pars |> 
   filter(param == 2) |>
@@ -1693,7 +1693,7 @@ perm_17_19_winner <- player_pars |>
   geom_segment(data = true_vals, 
                aes(x = mean, y = y_fake, yend = yend), col = "red") +
   labs(y = "", x = "Estimated W/L-Effect") +
-  theme_single_y()
+  theme_single_y() + xlim(c(-1,1))
 
 ggsave(plot = perm_17_19_winner, 
        filename = paste0(here("Paper_WriteUp", "paper_figures",
@@ -1782,8 +1782,8 @@ true_vals <- true_beta |>
   filter(param == 2) |>  
   mutate(y = factor(player_name, levels = levels)) |> 
   arrange(y) |> 
-  mutate(y_fake = row_number() - 0.25,
-         yend = row_number() + 0.25)
+  mutate(y_fake = row_number() - 0.4,
+         yend = row_number() + 0.4)
 
 perm_gm_winner <- player_pars |> 
   filter(param == 2) |>
@@ -1793,7 +1793,7 @@ perm_gm_winner <- player_pars |>
   geom_segment(data = true_vals,
                aes(x = mean, y = y_fake, yend = yend), col = "red") +
   theme_single_y() +
-  labs(x = "Estimated W/L-Effect", y = "")
+  labs(x = "Estimated W/L-Effect", y = "") + xlim(c(-1,1))
 
 perm_gm_winner
 
@@ -1811,8 +1811,8 @@ true_vals <- true_beta |>
   filter(param == 1) |>  
   mutate(y = factor(player_name, levels = levels)) |> 
   arrange(y) |> 
-  mutate(y_fake = row_number() - 0.5,
-         yend = row_number() + 0.5)
+  mutate(y_fake = row_number() - 0.4,
+         yend = row_number() + 0.4)
 
 perm_gm_player <- player_pars |> 
   filter(param == 1) |>
